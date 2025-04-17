@@ -172,7 +172,7 @@ hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - 
 		<transition id="id16">
 			<source ref="id15"/>
 			<target ref="id15"/>
-			<label kind="guard" x="-118" y="-5">tt=1</label>
+			<label kind="guard" x="-118" y="-5">tt==1</label>
 			<label kind="assignment" x="-118" y="29">tt=0</label>
 			<nail x="0" y="59"/>
 			<nail x="-136" y="0"/>
@@ -206,11 +206,13 @@ const int DAMAGE = 2;
 			<target ref="id18"/>
 			<label kind="guard" x="25" y="-17">t&gt;=FIRE_RATE</label>
 			<label kind="assignment" x="263" y="-51">t = 0,
-turret_count++,
-e1_in_range = abs(path[e1_pos].x - TURRET_X) + abs(path[e1_pos].y - TURRET_Y) &lt;= TURRET_RANGE,
-e2_in_range = abs(path[e2_pos].x - TURRET_X) + abs(path[e2_pos].y - TURRET_Y) &lt;= TURRET_RANGE,
-e1_health = (e1_in_range &amp;&amp; e1_health &gt; 0) ? e1_health - 1 : e1_health,
-e2_health = (e2_in_range &amp;&amp; e2_health &gt; 0) ? e2_health - 1 : e2_health</label>
+t = 0,
+hp[0] = (hp[0] &gt; 0 &amp;&amp; abs(path[pos[0]].x - x) + abs(path[pos[0]].y - y) &lt;= RANGE) ? hp[0] - DAMAGE : hp[0],
+hp[1] = (hp[1] &gt; 0 &amp;&amp; abs(path[pos[1]].x - x) + abs(path[pos[1]].y - y) &lt;= RANGE) ? hp[1] - DAMAGE : hp[1],
+hp[2] = (hp[2] &gt; 0 &amp;&amp; abs(path[pos[2]].x - x) + abs(path[pos[2]].y - y) &lt;= RANGE) ? hp[2] - DAMAGE : hp[2],
+hp[3] = (hp[3] &gt; 0 &amp;&amp; abs(path[pos[3]].x - x) + abs(path[pos[3]].y - y) &lt;= RANGE) ? hp[3] - DAMAGE : hp[3],
+hp[4] = (hp[4] &gt; 0 &amp;&amp; abs(path[pos[4]].x - x) + abs(path[pos[4]].y - y) &lt;= RANGE) ? hp[4] - DAMAGE : hp[4],
+hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - y) &lt;= RANGE) ? hp[5] - DAMAGE : hp[5]</label>
 		</transition>
 	</template>
 	<template>

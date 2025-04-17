@@ -5,8 +5,8 @@
 const int NUM_ENEMIES = 6; // 3 Circles, 3 Squares
 
 int pos[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0};
-int hp[NUM_ENEMIES] = {50,50,50,50,50,50};
-int dmg[NUM_ENEMIES] = {3, 3, 3, 5, 5, 5};
+int hp[NUM_ENEMIES] = {10,10,10,20,20,20};
+int dmg[NUM_ENEMIES] = {2, 2, 2, 4, 4, 4};
 
 
 typedef struct {
@@ -26,7 +26,7 @@ const Coord mainTower = {15, 7};
 
 
 
-int lives = 100;
+int lives = 10;
 
 // === Configuration VI: Assignment ===
 const int basic_x[1] = {5};
@@ -76,9 +76,9 @@ const int sniper_y[2] = {3, 5};
 		<name>SniperTurret</name>
 		<parameter>int x, int y</parameter>
 		<declaration>clock t;
-const int FIRE_RATE = 10;
-const int RANGE = 8;
-const int DAMAGE = 10;
+const int FIRE_RATE = 4;
+const int RANGE = 20;
+const int DAMAGE = 8;
 </declaration>
 		<location id="id5" x="0" y="0">
 			<name x="-10" y="-34">Idle</name>
@@ -109,9 +109,9 @@ hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - 
 		<name>CannonTurret</name>
 		<parameter>int x, int y</parameter>
 		<declaration>clock t;
-const int FIRE_RATE = 4;
-const int RANGE = 6;
-const int DAMAGE = 6;
+const int FIRE_RATE = 1;
+const int RANGE = 7;
+const int DAMAGE = 5;
 </declaration>
 		<location id="id9" x="0" y="0">
 			<name x="-10" y="-34">Idle</name>
@@ -144,7 +144,7 @@ hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - 
 		<parameter>int x,int y</parameter>
 		<declaration>clock t;
 const int FIRE_RATE = 2;
-const int RANGE = 3;
+const int RANGE = 2;
 const int DAMAGE = 2;
 </declaration>
 		<location id="id13" x="0" y="0">
@@ -243,8 +243,7 @@ lives = lives - dmg[id]</label>
 			<target ref="id22"/>
 			<label kind="guard" x="-143" y="63">clk&gt;=1 &amp;&amp; hp[id] &gt; 0 &amp;&amp; local_pos &lt; PATH_LENGTH - 1</label>
 			<label kind="assignment" x="-143" y="97">clk = 0,
-local_pos = local_pos + 1,
-pos[id] = local_pos</label>
+local_pos = local_pos + 1</label>
 			<nail x="-161" y="127"/>
 			<nail x="-161" y="68"/>
 		</transition>
@@ -279,7 +278,8 @@ system E0, E1, E2, E3, E4, E5, Monitor, ClockTick1, Basic1, Cannon1, Cannon3, Ca
 </system>
 	<queries>
 		<query>
-			<formula>E&lt;&gt; Monitor.Done
+			<formula>A[] forall (i:int[0,5]) (hp[i] == 0 || (pos[i] == PATH_LENGTH - 1 &amp;&amp; hp[i] &gt; 0))
+
 
 
 
@@ -291,7 +291,7 @@ system E0, E1, E2, E3, E4, E5, Monitor, ClockTick1, Basic1, Cannon1, Cannon3, Ca
 
 </formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2025-04-15 18:13:13 +0200">
+			<result outcome="failure" type="quality" timestamp="2025-04-17 12:27:50 +0200">
 			</result>
 		</query>
 	</queries>
