@@ -2,6 +2,13 @@
 <!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
 <nta>
 	<declaration>// Place global declarations here.
+const int NUM_ENEMIES = 6; // 3 Circles, 3 Squares
+
+int pos[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0};
+int hp[NUM_ENEMIES] = {50,50,50,50,50,50};
+int dmg[NUM_ENEMIES] = {3, 3, 3, 5, 5, 5};
+
+
 typedef struct {
   int x;
   int y;
@@ -18,26 +25,8 @@ const Coord path[PATH_LENGTH] = {
 const Coord mainTower = {15, 7};
 
 
-clock clk;
-int position = 0; // current position on path
 
-
-const int FIRE_RATE = 3;
-const int TURRET_X = 0;
-const int TURRET_Y = 1;
-const int TURRET_RANGE = 1;
-
-bool e1_in_range = false;
-bool e2_in_range = false;
-
-
-int e1_health = 2;
-int e2_health = 2;
-
-int e1_pos = 0;
-int e2_pos = 0;
-
-int lives = 5;
+int lives = 100;
 
 // === Configuration VI: Assignment ===
 const int basic_x[1] = {5};
@@ -52,109 +41,257 @@ const int sniper_y[2] = {3, 5};
 
 </declaration>
 	<template>
+		<name>ClockTick</name>
+		<declaration>clock tt;</declaration>
+		<location id="id0" x="0" y="0">
+			<name x="-10" y="-34">Tick</name>
+			<label kind="invariant" x="-10" y="17">tt &lt;= 1</label>
+		</location>
+		<init ref="id0"/>
+		<transition id="id1">
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-84" y="12">tt==1</label>
+			<label kind="assignment" x="-84" y="46">tt=0</label>
+			<nail x="-102" y="93"/>
+			<nail x="-102" y="-8"/>
+		</transition>
+	</template>
+	<template>
+		<name>GameMonitor</name>
+		<location id="id2" x="0" y="0">
+			<name x="-10" y="-34">Wait</name>
+		</location>
+		<location id="id3" x="0" y="110">
+			<name x="-10" y="76">Done</name>
+		</location>
+		<init ref="id2"/>
+		<transition id="id4">
+			<source ref="id2"/>
+			<target ref="id3"/>
+			<label kind="guard" x="0" y="21">forall (i:int[0,5]) (hp[i] == 0 || (pos[i] == PATH_LENGTH - 1 &amp;&amp; hp[i] &gt; 0))</label>
+		</transition>
+	</template>
+	<template>
+		<name>SniperTurret</name>
+		<parameter>int x, int y</parameter>
+		<declaration>clock t;
+const int FIRE_RATE = 10;
+const int RANGE = 8;
+const int DAMAGE = 10;
+</declaration>
+		<location id="id5" x="0" y="0">
+			<name x="-10" y="-34">Idle</name>
+		</location>
+		<location id="id6" x="0" y="127">
+			<name x="-10" y="93">Firing</name>
+		</location>
+		<init ref="id5"/>
+		<transition id="id7">
+			<source ref="id6"/>
+			<target ref="id5"/>
+			<nail x="-127" y="127"/>
+		</transition>
+		<transition id="id8">
+			<source ref="id5"/>
+			<target ref="id6"/>
+			<label kind="guard" x="0" y="29">t&gt;=FIRE_RATE</label>
+			<label kind="assignment" x="0" y="63">t = 0,
+hp[0] = (hp[0] &gt; 0 &amp;&amp; abs(path[pos[0]].x - x) + abs(path[pos[0]].y - y) &lt;= RANGE) ? hp[0] - DAMAGE : hp[0],
+hp[1] = (hp[1] &gt; 0 &amp;&amp; abs(path[pos[1]].x - x) + abs(path[pos[1]].y - y) &lt;= RANGE) ? hp[1] - DAMAGE : hp[1],
+hp[2] = (hp[2] &gt; 0 &amp;&amp; abs(path[pos[2]].x - x) + abs(path[pos[2]].y - y) &lt;= RANGE) ? hp[2] - DAMAGE : hp[2],
+hp[3] = (hp[3] &gt; 0 &amp;&amp; abs(path[pos[3]].x - x) + abs(path[pos[3]].y - y) &lt;= RANGE) ? hp[3] - DAMAGE : hp[3],
+hp[4] = (hp[4] &gt; 0 &amp;&amp; abs(path[pos[4]].x - x) + abs(path[pos[4]].y - y) &lt;= RANGE) ? hp[4] - DAMAGE : hp[4],
+hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - y) &lt;= RANGE) ? hp[5] - DAMAGE : hp[5]</label>
+		</transition>
+	</template>
+	<template>
+		<name>CannonTurret</name>
+		<parameter>int x, int y</parameter>
+		<declaration>clock t;
+const int FIRE_RATE = 4;
+const int RANGE = 6;
+const int DAMAGE = 6;
+</declaration>
+		<location id="id9" x="0" y="0">
+			<name x="-10" y="-34">Idle</name>
+		</location>
+		<location id="id10" x="0" y="127">
+			<name x="-10" y="93">Firing</name>
+		</location>
+		<init ref="id9"/>
+		<transition id="id11">
+			<source ref="id10"/>
+			<target ref="id9"/>
+			<nail x="-102" y="127"/>
+			<nail x="-127" y="127"/>
+		</transition>
+		<transition id="id12">
+			<source ref="id9"/>
+			<target ref="id10"/>
+			<label kind="guard" x="0" y="29">t&gt;=FIRE_RATE</label>
+			<label kind="assignment" x="0" y="63">t = 0,
+hp[0] = (hp[0] &gt; 0 &amp;&amp; abs(path[pos[0]].x - x) + abs(path[pos[0]].y - y) &lt;= RANGE) ? hp[0] - DAMAGE : hp[0],
+hp[1] = (hp[1] &gt; 0 &amp;&amp; abs(path[pos[1]].x - x) + abs(path[pos[1]].y - y) &lt;= RANGE) ? hp[1] - DAMAGE : hp[1],
+hp[2] = (hp[2] &gt; 0 &amp;&amp; abs(path[pos[2]].x - x) + abs(path[pos[2]].y - y) &lt;= RANGE) ? hp[2] - DAMAGE : hp[2],
+hp[3] = (hp[3] &gt; 0 &amp;&amp; abs(path[pos[3]].x - x) + abs(path[pos[3]].y - y) &lt;= RANGE) ? hp[3] - DAMAGE : hp[3],
+hp[4] = (hp[4] &gt; 0 &amp;&amp; abs(path[pos[4]].x - x) + abs(path[pos[4]].y - y) &lt;= RANGE) ? hp[4] - DAMAGE : hp[4],
+hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - y) &lt;= RANGE) ? hp[5] - DAMAGE : hp[5]</label>
+		</transition>
+	</template>
+	<template>
+		<name>BasicTurret</name>
+		<parameter>int x,int y</parameter>
+		<declaration>clock t;
+const int FIRE_RATE = 2;
+const int RANGE = 3;
+const int DAMAGE = 2;
+</declaration>
+		<location id="id13" x="0" y="0">
+			<name x="-10" y="-34">Idle</name>
+		</location>
+		<location id="id14" x="0" y="153">
+			<name x="-10" y="119">Firing</name>
+		</location>
+		<init ref="id13"/>
+		<transition id="id15">
+			<source ref="id14"/>
+			<target ref="id13"/>
+			<nail x="-153" y="153"/>
+		</transition>
+		<transition id="id16">
+			<source ref="id13"/>
+			<target ref="id14"/>
+			<label kind="guard" x="0" y="42">t&gt;=FIRE_RATE</label>
+			<label kind="assignment" x="0" y="76">t = 0,
+hp[0] = (hp[0] &gt; 0 &amp;&amp; abs(path[pos[0]].x - x) + abs(path[pos[0]].y - y) &lt;= RANGE) ? hp[0] - DAMAGE : hp[0],
+hp[1] = (hp[1] &gt; 0 &amp;&amp; abs(path[pos[1]].x - x) + abs(path[pos[1]].y - y) &lt;= RANGE) ? hp[1] - DAMAGE : hp[1],
+hp[2] = (hp[2] &gt; 0 &amp;&amp; abs(path[pos[2]].x - x) + abs(path[pos[2]].y - y) &lt;= RANGE) ? hp[2] - DAMAGE : hp[2],
+hp[3] = (hp[3] &gt; 0 &amp;&amp; abs(path[pos[3]].x - x) + abs(path[pos[3]].y - y) &lt;= RANGE) ? hp[3] - DAMAGE : hp[3],
+hp[4] = (hp[4] &gt; 0 &amp;&amp; abs(path[pos[4]].x - x) + abs(path[pos[4]].y - y) &lt;= RANGE) ? hp[4] - DAMAGE : hp[4],
+hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - y) &lt;= RANGE) ? hp[5] - DAMAGE : hp[5]</label>
+		</transition>
+	</template>
+	<template>
 		<name>TurretAI</name>
 		<parameter>int x, int y</parameter>
 		<declaration>clock t;
+const int FIRE_RATE = 2; // basic
+const int RANGE = 2;
+const int DAMAGE = 2;
 </declaration>
-		<location id="id0" x="0" y="0">
+		<location id="id17" x="0" y="0">
 			<name x="-10" y="-34">Idle</name>
 		</location>
-		<location id="id1" x="0" y="85">
+		<location id="id18" x="0" y="85">
 			<name x="-10" y="51">Firing</name>
 		</location>
-		<init ref="id0"/>
-		<transition id="id2">
-			<source ref="id1"/>
-			<target ref="id0"/>
+		<init ref="id17"/>
+		<transition id="id19">
+			<source ref="id18"/>
+			<target ref="id17"/>
 			<nail x="-136" y="93"/>
 		</transition>
-		<transition id="id3">
-			<source ref="id0"/>
-			<target ref="id1"/>
+		<transition id="id20">
+			<source ref="id17"/>
+			<target ref="id18"/>
 			<label kind="guard" x="25" y="-17">t&gt;=FIRE_RATE</label>
 			<label kind="assignment" x="263" y="-51">t = 0,
-e1_in_range = abs(path[e1_pos].x - TURRET_X) + abs(path[e1_pos].y - TURRET_Y) &lt;= TURRET_RANGE,
-e2_in_range = abs(path[e2_pos].x - TURRET_X) + abs(path[e2_pos].y - TURRET_Y) &lt;= TURRET_RANGE,
-e1_health = (e1_in_range &amp;&amp; e1_health &gt; 0) ? e1_health - 1 : e1_health,
-e2_health = (e2_in_range &amp;&amp; e2_health &gt; 0) ? e2_health - 1 : e2_health</label>
+t = 0,
+hp[0] = (hp[0] &gt; 0 &amp;&amp; abs(path[pos[0]].x - x) + abs(path[pos[0]].y - y) &lt;= RANGE) ? hp[0] - DAMAGE : hp[0],
+hp[1] = (hp[1] &gt; 0 &amp;&amp; abs(path[pos[1]].x - x) + abs(path[pos[1]].y - y) &lt;= RANGE) ? hp[1] - DAMAGE : hp[1],
+hp[2] = (hp[2] &gt; 0 &amp;&amp; abs(path[pos[2]].x - x) + abs(path[pos[2]].y - y) &lt;= RANGE) ? hp[2] - DAMAGE : hp[2],
+hp[3] = (hp[3] &gt; 0 &amp;&amp; abs(path[pos[3]].x - x) + abs(path[pos[3]].y - y) &lt;= RANGE) ? hp[3] - DAMAGE : hp[3],
+hp[4] = (hp[4] &gt; 0 &amp;&amp; abs(path[pos[4]].x - x) + abs(path[pos[4]].y - y) &lt;= RANGE) ? hp[4] - DAMAGE : hp[4],
+hp[5] = (hp[5] &gt; 0 &amp;&amp; abs(path[pos[5]].x - x) + abs(path[pos[5]].y - y) &lt;= RANGE) ? hp[5] - DAMAGE : hp[5]</label>
 		</transition>
 	</template>
 	<template>
 		<name>EnemyTemplate</name>
 		<parameter>const int id</parameter>
-		<location id="id4" x="0" y="0">
-			<name x="-10" y="-34">Spawned</name>
+		<declaration>clock clk;
+int local_pos = 0;
+</declaration>
+		<location id="id21" x="-76" y="-255">
+			<name x="-86" y="-289">Spawned</name>
 		</location>
-		<location id="id5" x="-68" y="68">
+		<location id="id22" x="-68" y="68">
 			<name x="-78" y="34">Moving</name>
 		</location>
-		<location id="id6" x="76" y="68">
-			<name x="66" y="34">Done</name>
-		</location>
-		<location id="id7" x="297" y="-144">
+		<location id="id23" x="297" y="-144">
 			<name x="287" y="-178">Goal</name>
 		</location>
-		<location id="id8" x="-68" y="229">
-			<name x="-78" y="195">Killed</name>
+		<location id="id24" x="-76" y="255">
+			<name x="-86" y="221">Killed</name>
 		</location>
-		<init ref="id4"/>
-		<transition id="id9">
-			<source ref="id5"/>
-			<target ref="id8"/>
-			<label kind="guard" x="-68" y="114">(id == 1 &amp;&amp; e1_health == 0) || (id == 2 &amp;&amp; e2_health == 0)</label>
+		<init ref="id21"/>
+		<transition id="id25">
+			<source ref="id22"/>
+			<target ref="id24"/>
+			<label kind="guard" x="-72" y="127">clk &gt;= 1 &amp;&amp; hp[id] == 0</label>
+			<label kind="assignment" x="-72" y="161">pos[id] = local_pos</label>
 		</transition>
-		<transition id="id10">
-			<source ref="id5"/>
-			<target ref="id7"/>
-			<label kind="guard" x="-50" y="-72">(position &gt;= PATH_LENGTH - 1) &amp;&amp; 
-((id == 1 &amp;&amp; e1_health &gt; 0) || (id == 2 &amp;&amp; e2_health &gt; 0))</label>
-			<label kind="assignment" x="-50" y="-38">lives = lives - 1</label>
+		<transition id="id26">
+			<source ref="id22"/>
+			<target ref="id23"/>
+			<label kind="guard" x="-50" y="-72">clk&gt;=1 &amp;&amp; hp[id] &gt; 0 &amp;&amp; local_pos &gt;= PATH_LENGTH - 1</label>
+			<label kind="assignment" x="-50" y="-38">pos[id] = local_pos,
+lives = lives - dmg[id]</label>
 		</transition>
-		<transition id="id11">
-			<source ref="id5"/>
-			<target ref="id6"/>
-			<label kind="guard" x="-50" y="34">position == PATH_LENGTH - 1</label>
+		<transition id="id27">
+			<source ref="id22"/>
+			<target ref="id22"/>
+			<label kind="guard" x="-143" y="63">clk&gt;=1 &amp;&amp; hp[id] &gt; 0 &amp;&amp; local_pos &lt; PATH_LENGTH - 1</label>
+			<label kind="assignment" x="-143" y="97">clk = 0,
+local_pos = local_pos + 1,
+pos[id] = local_pos</label>
+			<nail x="-161" y="127"/>
+			<nail x="-161" y="68"/>
 		</transition>
-		<transition id="id12">
-			<source ref="id5"/>
-			<target ref="id5"/>
-			<label kind="guard" x="-107" y="50">clk&gt;=1 &amp;&amp;
-position &lt; PATH_LENGTH - 1 &amp;&amp;
-((id == 1 &amp;&amp; e1_health &gt; 0) || (id == 2 &amp;&amp; e2_health &gt; 0))</label>
-			<label kind="assignment" x="-107" y="84">clk=0, position=position+1,
-e1_pos = (id == 1 ? position : e1_pos),
-e2_pos = (id == 2 ? position : e2_pos)</label>
-			<nail x="-119" y="76"/>
-		</transition>
-		<transition id="id13">
-			<source ref="id4"/>
-			<target ref="id5"/>
-			<label kind="assignment" x="-50" y="34">clk=0</label>
+		<transition id="id28">
+			<source ref="id21"/>
+			<target ref="id22"/>
 		</transition>
 	</template>
 	<system>// Place template instantiations here.
+
+E0 = EnemyTemplate(0);
 E1 = EnemyTemplate(1);
 E2 = EnemyTemplate(2);
-T = TurretAI(0, 0);
+E3 = EnemyTemplate(3);
+E4 = EnemyTemplate(4);
+E5 = EnemyTemplate(5);
+Monitor = GameMonitor();
+ClockTick1 = ClockTick();
+Basic1 = BasicTurret(basic_x[0], basic_y[0]);
+Cannon1 = CannonTurret(cannon_x[0], cannon_y[0]);
+Cannon3 = CannonTurret(cannon_x[1], cannon_y[1]);
+Cannon4 = CannonTurret(cannon_x[2], cannon_y[2]);
+Sniper1 = SniperTurret(sniper_x[0], sniper_y[0]);
+Sniper2 = SniperTurret(sniper_x[1], sniper_y[1]);
 
-Basic1 = TurretAI(basic_x[0], basic_y[0]);
-Cannon1 = TurretAI(cannon_x[0], cannon_y[0]);
-Cannon3 = TurretAI(cannon_x[1], cannon_y[1]);
-Cannon4 = TurretAI(cannon_x[2], cannon_y[2]);
-Sniper1 = TurretAI(sniper_x[0], sniper_y[0]);
-Sniper2 = TurretAI(sniper_x[1], sniper_y[1]);
 
-system E1, E2, T, Basic1, Cannon1, Cannon3, Cannon4, Sniper1, Sniper2;
+
+system E0, E1, E2, E3, E4, E5, Monitor, ClockTick1, Basic1, Cannon1, Cannon3, Cannon4, Sniper1, Sniper2;
 
 
 
 </system>
 	<queries>
 		<query>
-			<formula>A&lt;&gt; (E1.Killed and E2.Killed)
+			<formula>E&lt;&gt; Monitor.Done
+
+
+
+
+
+
+
+
+
 </formula>
 			<comment/>
-			<result outcome="failure" type="quality" timestamp="2025-04-13 11:07:39 +0200">
+			<result outcome="success" type="quality" timestamp="2025-04-15 18:13:13 +0200">
 			</result>
 		</query>
 	</queries>
