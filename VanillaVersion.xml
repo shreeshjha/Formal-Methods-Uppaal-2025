@@ -43,7 +43,7 @@ int time_on_map[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Time spent on map
 
 
 // Game state tracking
-int lives = 10; // Main tower health
+int lives = 100; // Main tower health
 bool game_over = false;
 bool timeout_reached = false;
 int global_clock;
@@ -433,8 +433,8 @@ clock clk_global_sync;</declaration>
 		<transition id="id20">
 			<source ref="id13"/>
 			<target ref="id16"/>
-			<label kind="guard" x="-262" y="276">clk &gt;= get_enemy_speed(id) &amp;&amp; is_stuck(id)</label>
-			<label kind="assignment" x="-262" y="310">pos[id] = -1, hp[id] = 0, clk = 0</label>
+			<label kind="guard" x="-262" y="276">hp[id]&lt;=0</label>
+			<label kind="assignment" x="-262" y="310">clk = 0, pos[id] = -1</label>
 			<nail x="-280" y="314"/>
 			<nail x="221" y="306"/>
 		</transition>
@@ -468,14 +468,14 @@ clock clk_global_sync;</declaration>
 		<transition id="id25">
 			<source ref="id13"/>
 			<target ref="id14"/>
-			<label kind="guard" x="-262" y="-64">clk &gt;= get_enemy_speed(id) &amp;&amp; can_branch(id) &amp;&amp; !game_over</label>
+			<label kind="guard" x="-262" y="-64">clk &gt;= get_enemy_speed(id) &amp;&amp; can_branch(id)</label>
 			<label kind="assignment" x="-262" y="-30">clk = 0, time_on_map[id] = time_on_map[id] + 1</label>
 			<nail x="51" y="8"/>
 		</transition>
 		<transition id="id26">
 			<source ref="id13"/>
 			<target ref="id13"/>
-			<label kind="guard" x="-301" y="-157">clk &gt;= get_enemy_speed(id) &amp;&amp; can_move(id) &amp;&amp; !game_over</label>
+			<label kind="guard" x="-301" y="-157">clk &gt;= get_enemy_speed(id) &amp;&amp; can_move(id)</label>
 			<label kind="assignment" x="-301" y="-123">update_enemy_position(id), time_on_map[id] = time_on_map[id] + 1</label>
 			<nail x="-323" y="-178"/>
 			<nail x="-323" y="93"/>
@@ -530,7 +530,7 @@ clock clk_global_sync;</declaration>
 		<transition id="id37">
 			<source ref="id28"/>
 			<target ref="id30"/>
-			<label kind="guard" x="-7" y="-165">lives &lt;= 0</label>
+			<label kind="guard" x="-7" y="-165">lives &lt;= 0 &amp;&amp; all_enemies_gone()</label>
 			<label kind="assignment" x="-7" y="-131">game_over = true</label>
 		</transition>
 		<transition id="id38">
