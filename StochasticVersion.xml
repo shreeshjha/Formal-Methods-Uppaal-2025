@@ -3,9 +3,9 @@
 <nta>
 	<declaration>// Place global declarations here.
 // Game Constants
-const int NUM_ENEMIES = 6; // 3 Circles, 3 Squares
+const int NUM_ENEMIES = 700; // 3 Circles, 3 Squares
 const int TIMEOUT = 100; // Game timeout in time units
-const int LAST_SPAWN = 6;          // = max value in spawn_time[]
+
 
 // Enemy Parameters
 const int CIRCLE_SPEED = 1;
@@ -27,23 +27,56 @@ const int SNIPER_FIRE_SPEED = 20;
 const int SNIPER_DAMAGE = 8;
 
 // Main Tower
-const int MAIN_TOWER_HEALTH = 10;
+const int MAIN_TOWER_HEALTH = 100;
 
 // Map Constants
 const int MAP_WIDTH = 16;
 const int MAP_HEIGHT = 8;
 
 // Enemy tracking arrays
-int pos[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Current position on path
-int hp[NUM_ENEMIES] = {10, 10, 10, 20, 20, 20}; // Health points
-int dmg[NUM_ENEMIES] = {2, 2, 2, 4, 4, 4}; // Damage value
-int spawn_time[NUM_ENEMIES] = {0, 2, 4, 0, 3, 6}; // When enemies spawn
-int time_on_map[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Time spent on map
+int pos[NUM_ENEMIES];        // Current position on path
+int hp[NUM_ENEMIES];         // Health points
+int dmg[NUM_ENEMIES];        // Damage value
+int spawn_time[NUM_ENEMIES]; // When enemies spawn
+int time_on_map[NUM_ENEMIES]; // Time spent on map
+int path_choice[NUM_ENEMIES]; // Which path each enemy is on
+int alt_pos[NUM_ENEMIES];    // Position on alternate paths
+bool active[NUM_ENEMIES];    // Whether enemy is currently active in simulation
+
+// Initialize arrays with proper values
+void initialize_arrays() {
+    int i;
+    // Initialize the first 400 enemies as Circles
+    for (i = 0; i &lt; NUM_ENEMIES; i++) {
+        active[i] = false;
+    }
+    for (i = 0; i &lt; 400; i++) {
+        pos[i] = 0;
+        hp[i] = CIRCLE_HEALTH;
+        dmg[i] = CIRCLE_DAMAGE;
+        spawn_time[i] = i / 2; // Circles spawn every 2 time units
+        time_on_map[i] = 0;
+        path_choice[i] = 0;
+        alt_pos[i] = 0;
+    }
+    
+    // Initialize the remaining 300 enemies as Squares
+    for (i = 400; i &lt; NUM_ENEMIES; i++) {
+        pos[i] = 0;
+        hp[i] = SQUARE_HEALTH;
+        dmg[i] = SQUARE_DAMAGE;
+        spawn_time[i] = (i - 400) / 3; // Squares spawn every 3 time units
+        time_on_map[i] = 0;
+        path_choice[i] = 0;
+        alt_pos[i] = 0;
+    }
+}
+
 
 
 
 // Game state tracking
-int lives = 10; // Main tower health
+int lives = 100; // Main tower health
 bool game_over = false;
 bool timeout_reached = false;
 int global_clock;
@@ -82,9 +115,6 @@ const Coord alt_path2[ALT_PATH2_LENGTH] = {
 };
 
 // Track which path each enemy is on (0 = main path, 1 = alt_path1, 2 = alt_path2)
-int path_choice[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0};
-// Track position on alternate paths
-int alt_pos[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0};
 
 
 
@@ -310,6 +340,8 @@ void mark_enemy_done(int id) {
     else
         alt_pos[id] = -1;
 }
+
+
 </declaration>
 	<template>
 		<name>SniperTurret</name>
@@ -317,12 +349,23 @@ void mark_enemy_done(int id) {
 		<declaration>clock t;
 const int RANGE = SNIPER_RANGE;
 const int FIRE_RATE = SNIPER_FIRE_SPEED;
-const int DAMAGE = SNIPER_DAMAGE;</declaration>
+const int DAMAGE = SNIPER_DAMAGE;
+
+// Calculate fire rate as a ratio (r:q format)
+int get_fire_rate_numerator() {
+    return 1;
+}
+
+int get_fire_rate_denominator() {
+    return FIRE_RATE;
+}</declaration>
 		<location id="id0" x="-42" y="-255">
 			<name x="-52" y="-289">Idle</name>
+			<label kind="exponentialrate" x="-52" y="-221">get_fire_rate_numerator():get_fire_rate_denominator()</label>
 		</location>
 		<location id="id1" x="-42" y="25">
 			<name x="-52" y="-9">Firing</name>
+			<label kind="exponentialrate" x="-52" y="59">1</label>
 		</location>
 		<init ref="id0"/>
 		<transition id="id2">
@@ -344,12 +387,23 @@ const int DAMAGE = SNIPER_DAMAGE;</declaration>
 		<declaration>clock t;
 const int RANGE = CANNON_RANGE;
 const int FIRE_RATE = CANNON_FIRE_SPEED;
-const int DAMAGE = CANNON_DAMAGE;</declaration>
+const int DAMAGE = CANNON_DAMAGE;
+
+// Calculate fire rate as a ratio (r:q format)
+int get_fire_rate_numerator() {
+    return 1;
+}
+
+int get_fire_rate_denominator() {
+    return FIRE_RATE;
+}</declaration>
 		<location id="id4" x="-153" y="-416">
 			<name x="-163" y="-450">Idle</name>
+			<label kind="exponentialrate" x="-163" y="-382">get_fire_rate_numerator():get_fire_rate_denominator()</label>
 		</location>
 		<location id="id5" x="-144" y="-170">
 			<name x="-154" y="-204">Firing</name>
+			<label kind="exponentialrate" x="-154" y="-136">1</label>
 		</location>
 		<init ref="id4"/>
 		<transition id="id6">
@@ -371,12 +425,23 @@ const int DAMAGE = CANNON_DAMAGE;</declaration>
 		<declaration>clock t;
 const int RANGE = BASIC_RANGE;
 const int FIRE_RATE = BASIC_FIRE_SPEED;
-const int DAMAGE = BASIC_DAMAGE;</declaration>
+const int DAMAGE = BASIC_DAMAGE;
+
+// Calculate fire rate as a ratio (r:q format)
+int get_fire_rate_numerator() {
+    return 1;
+}
+
+int get_fire_rate_denominator() {
+    return FIRE_RATE;
+}</declaration>
 		<location id="id8" x="-42" y="-280">
 			<name x="-61" y="-314">Idle</name>
+			<label kind="exponentialrate" x="-52" y="-246">get_fire_rate_numerator():get_fire_rate_denominator()</label>
 		</location>
 		<location id="id9" x="-42" y="-102">
 			<name x="-52" y="-136">Firing</name>
+			<label kind="exponentialrate" x="-52" y="-68">1</label>
 		</location>
 		<init ref="id8"/>
 		<transition id="id10">
@@ -397,24 +462,41 @@ const int DAMAGE = BASIC_DAMAGE;</declaration>
 		<parameter>int id</parameter>
 		<declaration>
 clock clk;
-clock clk_global_sync;</declaration>
+clock clk_global_sync;
+
+
+// Calculate enemy rate as a ratio (r:q format)
+// Where r is the numerator and q is the denominator
+int get_enemy_speed_numerator(int enemy_id) {
+    return (enemy_id &lt; 400) ? CIRCLE_SPEED : SQUARE_SPEED;
+}
+
+int get_enemy_speed_denominator(int enemy_id) {
+    return 10;
+}</declaration>
 		<location id="id12" x="-8" y="-323">
 			<name x="-18" y="-357">Spawned</name>
+			<label kind="exponentialrate" x="-18" y="-289">1</label>
 		</location>
 		<location id="id13" x="-280" y="-68">
 			<name x="-290" y="-102">Moving</name>
+			<label kind="exponentialrate" x="-290" y="-34">get_enemy_speed_numerator(id):get_enemy_speed_denominator(id)</label>
 		</location>
 		<location id="id14" x="255" y="-42">
 			<name x="245" y="-76">AtBranch</name>
+			<label kind="exponentialrate" x="245" y="-8">1</label>
 		</location>
 		<location id="id15" x="-153" y="255">
 			<name x="-163" y="221">Goal</name>
+			<label kind="exponentialrate" x="-163" y="289">1</label>
 		</location>
 		<location id="id16" x="221" y="272">
 			<name x="211" y="238">Killed</name>
+			<label kind="exponentialrate" x="211" y="306">1</label>
 		</location>
 		<location id="id17" x="187" y="-331">
 			<name x="177" y="-365">NotActive</name>
+			<label kind="exponentialrate" x="177" y="-297">1</label>
 		</location>
 		<init ref="id17"/>
 		<transition id="id18">
@@ -536,8 +618,7 @@ clock clk_global_sync;</declaration>
 		<transition id="id38">
 			<source ref="id28"/>
 			<target ref="id29"/>
-			<label kind="guard" x="-331" y="-238">global_clock &gt;= LAST_SPAWN          &amp;&amp;
-all_enemies_gone()                  &amp;&amp;
+			<label kind="guard" x="-331" y="-238">all_enemies_gone()                  &amp;&amp;
 lives &gt; 0</label>
 			<label kind="assignment" x="-297" y="-204">game_over = true</label>
 		</transition>
@@ -554,8 +635,17 @@ clock c;</declaration>
 			<name x="-10" y="-34">Tick</name>
 			<label kind="invariant" x="-10" y="17">c &lt;= 1</label>
 		</location>
-		<init ref="id39"/>
-		<transition id="id40">
+		<location id="id40" x="-34" y="-127">
+			<name x="-44" y="-161">Initialize</name>
+			<committed/>
+		</location>
+		<init ref="id40"/>
+		<transition id="id41">
+			<source ref="id40"/>
+			<target ref="id39"/>
+			<label kind="assignment" x="-17" y="-63">initialize_arrays()</label>
+		</transition>
+		<transition id="id42">
 			<source ref="id39"/>
 			<target ref="id39"/>
 			<label kind="guard" x="-160" y="59">c &gt;= 1 &amp;&amp; global_clock &lt; TIMEOUT</label>
@@ -564,7 +654,8 @@ clock c;</declaration>
 			<nail x="-178" y="0"/>
 		</transition>
 	</template>
-	<system>clock1 = ClockTick();
+	<system>
+clock1 = ClockTick();
 GM = GameMonitor();
 
 E0 = EnemyTemplate(0);
@@ -574,15 +665,17 @@ E3 = EnemyTemplate(3);
 E4 = EnemyTemplate(4);
 E5 = EnemyTemplate(5);
 
-//Basic1 = BasicTurret(basic_x[0], basic_y[0]);
-//Cannon1 = CannonTurret(cannon_x[0], cannon_y[0]);
-//Cannon2 = CannonTurret(cannon_x[1], cannon_y[1]);
-//Cannon3 = CannonTurret(cannon_x[2], cannon_y[2]);
-//Cannon4 = CannonTurret(cannon_x[3], cannon_y[3]);
-//Sniper1 = SniperTurret(sniper_x[0], sniper_y[0]);
-//Sniper2 = SniperTurret(sniper_x[1], sniper_y[1]);
+Basic1 = BasicTurret(basic_x[0], basic_y[0]);
+Cannon1 = CannonTurret(cannon_x[0], cannon_y[0]);
+Cannon2 = CannonTurret(cannon_x[1], cannon_y[1]);
+Cannon3 = CannonTurret(cannon_x[2], cannon_y[2]);
+Cannon4 = CannonTurret(cannon_x[3], cannon_y[3]);
+Sniper1 = SniperTurret(sniper_x[0], sniper_y[0]);
+Sniper2 = SniperTurret(sniper_x[1], sniper_y[1]);
 
-system clock1, E0, E1, E2, E3, E4, E5;
+
+
+system clock1, E0, E1, E2, E3, E4, E5, Basic1, Cannon1, Cannon2, Cannon3, Cannon4, Sniper1, Sniper2, GM;
 </system>
 	<queries>
 		<query>
@@ -619,6 +712,11 @@ system clock1, E0, E1, E2, E3, E4, E5;
 		</query>
 		<query>
 			<formula>E&lt;&gt; GM.WinState</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>simulate[&lt;=200;100] {lives, global_clock}
+</formula>
 			<comment/>
 		</query>
 	</queries>
