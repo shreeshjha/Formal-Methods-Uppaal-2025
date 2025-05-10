@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+	<declaration>// Place global declarations here.
+// Place global declarations here.
+// Game Constants
+const int NUM_ENEMIES = 6; // 3 Circles, 3 Squares
+const int TIMEOUT = 100; // Game timeout in time units
+const int LAST_SPAWN = 6; // = max value in spawn_time[]
+
+// Enemy Parameters
+const int CIRCLE_SPEED = 1;
+const int CIRCLE_HEALTH = 10;
+const int CIRCLE_DAMAGE = 2;
+const int SQUARE_SPEED = 3;
+const int SQUARE_HEALTH = 20;
+const int SQUARE_DAMAGE = 4;
+
+// Main Tower
+const int MAIN_TOWER_HEALTH = 10;
+
+// Map Constants
+const int MAP_WIDTH = 16;
+const int MAP_HEIGHT = 8;
+
+// Enemy tracking arrays - Simplified
+int pos[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Current position on path
+int hp[NUM_ENEMIES] = {10, 10, 10, 20, 20, 20}; // Health points
+int dmg[NUM_ENEMIES] = {2, 2, 2, 4, 4, 4}; // Damage value
+int spawn_time[NUM_ENEMIES] = {0, 2, 4, 0, 3, 6}; // When enemies spawn
+int time_on_map[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Time spent on map
+
+// Game state tracking
+int lives = 10; // Main tower health
+bool game_over = false;
+bool timeout_reached = false;
+int global_clock=0;
+
+// Coordinate structure for map positions
+typedef struct {
+  int x;
+  int y;
+} Coord;
+
+// Simplified path definition - single main path
+const int PATH_LENGTH = 23;
+const Coord path[PATH_LENGTH] = {
+    {0,0}, {1,0}, {2,0}, {3,0}, {4,0}, 
+    {4,1}, {4,2}, {4,3}, {4,4}, {5,4},
+    {6,4}, {7,4}, {8,4}, {8,5}, {8,6}, 
+    {8,7}, {9,7}, {10,7}, {11,7}, {12,7}, 
+    {13,7}, {14,7}, {15,4}
+};
+
+// Main tower position
+const Coord mainTower = {15, 4};
+
+// Helper Functions - Simplified
+
+// Manhattan distance between coordinates
+int distance(int x1, int y1, int x2, int y2) {
+    return abs(x1-x2) + abs(y1-y2);
+}
+
+Coord get_enemy_position(int enemy_id) {
+    Coord dummy = {-1, -1}; // return something safe
+
+    if (hp[enemy_id] &lt;= 0 || pos[enemy_id] &lt; 0)
+        return dummy;
+        
+    if (pos[enemy_id] &gt;= 0 &amp;&amp; pos[enemy_id] &lt; PATH_LENGTH)
+        return path[pos[enemy_id]];
+
+    return dummy; // fallback for invalid cases
+}
+
+// Update enemy position (simplified without branching)
+//void update_enemy_position(int id) {
+  //  pos[id] = pos[id] + 1;
+//}
+
+// Check if enemy has reached the end of path
+bool reached_path_end(int id) {
+    return pos[id] &gt;= PATH_LENGTH - 1;
+}
+
+// Returns true if all enemies are either killed or have reached the goal
+// Modified all_enemies_gone
+bool all_enemies_gone() {
+  int i;
+  for (i = 0; i &lt; NUM_ENEMIES; i++) {
+    if (hp[i] &gt; 0 &amp;&amp; pos[i] &gt;= 0 &amp;&amp; pos[i] &lt; PATH_LENGTH)
+      return false;
+  }
+  return true;
+}
+
+// Get the speed of the enemy based on its type
+int get_enemy_speed(int enemy_id) {
+    return (enemy_id &lt; 3) ? CIRCLE_SPEED : SQUARE_SPEED;
+}
+
+// Mark enemy as done (reached goal or killed)
+//void mark_enemy_done(int id) {
+ //   pos[id] = -1;
+//}
+
+// Check if all enemies with spawn_time &lt;= t have spawned and been processed
+//bool all_spawned_by_time(int t) {
+  //int i;
+  //for (i = 0; i &lt; NUM_ENEMIES; i++) {
+    //if (spawn_time[i] &lt;= t &amp;&amp; hp[i] &gt; 0 &amp;&amp; pos[i] &gt;= 0 &amp;&amp; pos[i] &lt; PATH_LENGTH)
+      //return false;
+  //}
+  //return true;
+//}
+
+</declaration>
+	<template>
+		<name>GameMonitor</name>
+		<declaration>clock tick;</declaration>
+		<location id="id0" x="-102" y="-246">
+			<name x="-119" y="-280">Wait</name>
+		</location>
+		<location id="id1" x="-102" y="42">
+			<name x="-112" y="8">Done</name>
+		</location>
+		<init ref="id0"/>
+		<transition id="id2">
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-339" y="-348">tick &gt;= 1</label>
+			<label kind="assignment" x="-339" y="-314">global_clock = global_clock + 1, tick = 0</label>
+			<nail x="-357" y="-382"/>
+			<nail x="255" y="-374"/>
+		</transition>
+		<transition id="id3">
+			<source ref="id0"/>
+			<target ref="id1"/>
+			<label kind="guard" x="-102" y="-136">all_enemies_gone() || lives &lt;= 0</label>
+			<label kind="assignment" x="-102" y="-102">game_over = true</label>
+		</transition>
+	</template>
+	<template>
+		<name x="5" y="5">EnemyTemplate</name>
+		<parameter>int id</parameter>
+		<declaration>// Place local declarations here.
+//clock clk;
+//clock clk_global_sync;
+
+//clock spawn_timer; // For tracking spawn time
+clock move_clock;  // For movement timing</declaration>
+		<location id="id4" x="722" y="-416">
+			<name x="712" y="-450">NotSpawned</name>
+			<committed/>
+		</location>
+		<location id="id5" x="-119" y="-416">
+			<name x="-129" y="-450">Moving</name>
+		</location>
+		<location id="id6" x="-119" y="153">
+			<name x="-129" y="119">Killed</name>
+		</location>
+		<location id="id7" x="714" y="153">
+			<name x="704" y="119">Goal</name>
+		</location>
+		<init ref="id4"/>
+		<transition id="id8">
+			<source ref="id5"/>
+			<target ref="id7"/>
+			<label kind="guard" x="238" y="-204">move_clock &gt;= get_enemy_speed(id) &amp;&amp; pos[id] &gt;= PATH_LENGTH - 1 &amp;&amp; hp[id] &gt; 0;</label>
+			<label kind="assignment" x="331" y="-161">lives = lives - dmg[id], pos[id] = -1;</label>
+		</transition>
+		<transition id="id9">
+			<source ref="id4"/>
+			<target ref="id6"/>
+			<label kind="guard" x="119" y="-102">hp[id] &lt;= 0;</label>
+		</transition>
+		<transition id="id10">
+			<source ref="id5"/>
+			<target ref="id6"/>
+			<label kind="guard" x="-119" y="-165">hp[id] &lt;= 0;</label>
+			<label kind="assignment" x="-119" y="-131">pos[id] = -1;</label>
+		</transition>
+		<transition id="id11">
+			<source ref="id5"/>
+			<target ref="id5"/>
+			<label kind="guard" x="-451" y="-374">move_clock &gt;= get_enemy_speed(id) &amp;&amp; pos[id] &lt; PATH_LENGTH - 1 &amp;&amp; hp[id] &gt; 0;</label>
+			<label kind="assignment" x="-459" y="-442">pos[id] = pos[id] + 1, move_clock = 0;</label>
+			<nail x="-341" y="-416"/>
+			<nail x="-341" y="-382"/>
+		</transition>
+		<transition id="id12">
+			<source ref="id4"/>
+			<target ref="id5"/>
+			<label kind="guard" x="-101" y="-450">global_clock &gt;= spawn_time[id];</label>
+			<label kind="assignment" x="-101" y="-416">pos[id] = 0, move_clock = 0;</label>
+		</transition>
+	</template>
+	<system>
+GM = GameMonitor();
+
+E0 = EnemyTemplate(0);
+E1 = EnemyTemplate(1);
+E2 = EnemyTemplate(2);
+E3 = EnemyTemplate(3);
+E4 = EnemyTemplate(4);
+E5 = EnemyTemplate(5);
+
+system GM, E0, E1, E2, E3, E4, E5;</system>
+	<queries>
+		<query>
+			<formula>A[] not deadlock
+</formula>
+			<comment/>
+			<option key="--extrapolation" value="0"/>
+			<option key="--state-representation" value="0"/>
+			<option key="--hashtable-size" value="32"/>
+			<option key="--search-order" value="0"/>
+			<option key="--statespace-consumption" value="3"/>
+		</query>
+	</queries>
+</nta>
