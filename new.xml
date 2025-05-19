@@ -15,6 +15,10 @@ const int SQUARE_SPEED = 3;
 const int SQUARE_HEALTH = 20;
 const int SQUARE_DAMAGE = 4;
 
+
+const int MAX_TURNS = 32000;
+int[0, MAX_TURNS] turn_counter = 0;
+
 // Main Tower
 const int MAIN_TOWER_HEALTH = 10;
 
@@ -33,7 +37,7 @@ int time_on_map[NUM_ENEMIES] = {0, 0, 0, 0, 0, 0}; // Time spent on map
 int lives = 10; // Main tower health
 bool game_over = false;
 bool timeout_reached = false;
-int turn_counter = 0; // Discrete time counter
+//int turn_counter = 0; // Discrete time counter
 
 // Simplified path definition - single main path
 const int PATH_LENGTH = 23;
@@ -80,8 +84,8 @@ bool can_increment = true;</declaration>
 		<transition id="id1">
 			<source ref="id0"/>
 			<target ref="id0"/>
-			<label kind="guard" x="-136" y="51">!game_over &amp;&amp; can_increment</label>
-			<label kind="assignment" x="-136" y="85">turn_counter++, can_increment = false</label>
+			<label kind="guard" x="-501" y="17">!game_over &amp;&amp; can_increment &amp;&amp; turn_counter &lt; 32000</label>
+			<label kind="assignment" x="-331" y="85">turn_counter++, can_increment = false</label>
 			<nail x="-102" y="68"/>
 		</transition>
 		<transition id="id2">
@@ -178,31 +182,38 @@ bool can_increment = true;</declaration>
 		</location>
 		<init ref="id14"/>
 		<transition id="id19">
+			<source ref="id18"/>
+			<target ref="id18"/>
+			<label kind="guard" x="-347" y="110">true</label>
+			<nail x="-365" y="110"/>
+			<nail x="-365" y="255"/>
+		</transition>
+		<transition id="id20">
 			<source ref="id16"/>
 			<target ref="id18"/>
 			<nail x="110" y="314"/>
 		</transition>
-		<transition id="id20">
+		<transition id="id21">
 			<source ref="id17"/>
 			<target ref="id18"/>
 		</transition>
-		<transition id="id21">
+		<transition id="id22">
 			<source ref="id15"/>
 			<target ref="id18"/>
 		</transition>
-		<transition id="id22">
+		<transition id="id23">
 			<source ref="id14"/>
 			<target ref="id17"/>
 			<label kind="guard" x="-21" y="-59">turn_counter &gt;= TIMEOUT</label>
 			<label kind="assignment" x="-21" y="-25">game_over = true, timeout_reached = true</label>
 		</transition>
-		<transition id="id23">
+		<transition id="id24">
 			<source ref="id14"/>
 			<target ref="id16"/>
 			<label kind="guard" x="-7" y="-165">lives &lt;= 0</label>
 			<label kind="assignment" x="-7" y="-131">game_over = true</label>
 		</transition>
-		<transition id="id24">
+		<transition id="id25">
 			<source ref="id14"/>
 			<target ref="id15"/>
 			<label kind="guard" x="-331" y="-238">all_enemies_gone() &amp;&amp; lives &gt; 0</label>
@@ -223,6 +234,9 @@ E5 = EnemyTemplate(5);
 // System without turrets (for properties I-V)
 system turn, GM, E0, E1, E2, E3, E4, E5;</system>
 	<queries>
+		<option key="--search-order" value="1"/>
+		<option key="--statespace-consumption" value="3"/>
+		<option key="--diagnostic" value="2"/>
 		<query>
 			<formula>A[] not deadlock</formula>
 			<comment>Property I: The game never reaches a deadlock state</comment>
