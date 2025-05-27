@@ -1,0 +1,70 @@
+<?xml version='1.0' encoding='utf-8'?>
+<nta><declaration>
+const int NUM_CIRCLES = 3;
+const int NUM_SQUARES = 3;
+const int NUM_ENEMIES = NUM_CIRCLES + NUM_SQUARES;
+
+const int TIMEOUT = 100;
+const int MAIN_TOWER_HEALTH = 10;
+
+const int CIRCLE_SPEED = 1;
+const int CIRCLE_HEALTH = 10;
+const int CIRCLE_DAMAGE = 2;
+
+const int SQUARE_SPEED = 3;
+const int SQUARE_HEALTH = 20;
+const int SQUARE_DAMAGE = 4;
+
+const int PATH_LENGTH = 23;
+typedef struct {
+  int x;
+  int y;
+} Coord;
+
+int spawn_time[NUM_ENEMIES] = {0, 2, 4, 1, 3, 5};
+int lives = MAIN_TOWER_HEALTH;
+int global_clock = 0;
+bool game_over = false;
+bool timeout_reached = false;
+
+const Coord path[PATH_LENGTH] = {
+  {0,0}, {1,0}, {2,0}, {3,0}, {4,0}, 
+  {4,1}, {4,2}, {4,3}, {4,4}, {5,4},
+  {6,4}, {7,4}, {8,4}, {8,5}, {8,6}, 
+  {8,7}, {9,7}, {10,7}, {11,7}, {12,7}, 
+  {13,7}, {14,7}, {15,4}
+};
+
+const Coord mainTower = {15, 4};
+</declaration><template><name>ClockTick</name><declaration>
+/** Manages the global time and timeout detection */
+clock c;
+</declaration><location id="tick" x="0" y="0" /><init ref="tick" /><transition><source ref="tick" /><target ref="tick" /><label kind="guard">c &gt;= 1 &amp;&amp; global_clock &lt; TIMEOUT</label><label kind="assignment">c = 0, global_clock++, timeout_reached = (global_clock &gt;= TIMEOUT)</label></transition><transition><source ref="tick" /><target ref="tick" /><label kind="guard">global_clock &gt;= TIMEOUT</label><label kind="assignment">c = 0</label></transition></template><template><name>Enemy</name><parameter>int id</parameter><declaration>
+/**
+ * Enemy automaton.
+ * Manages one enemy's spawning, movement, reaching goal, and game damage.
+ */
+clock clk;
+int hp;    // Health of the enemy
+int pos = 0; // Position on path
+int speed; // Movement speed
+int dmg;   // Damage dealt to the tower
+bool active = false;
+</declaration><location id="init" x="-100" y="-150"><name>Inactive</name></location><location id="spawned" x="0" y="-150"><name>Spawned</name></location><location id="moving" x="100" y="-150"><name>Moving</name></location><location id="goal" x="200" y="-150"><name>Goal</name></location><init ref="init" /><transition><source ref="init" /><target ref="spawned" /><label kind="guard">global_clock &gt;= spawn_time[id]</label><label kind="assignment">active = true, hp = (id &lt; NUM_CIRCLES) ? CIRCLE_HEALTH : SQUARE_HEALTH, speed = (id &lt; NUM_CIRCLES) ? CIRCLE_SPEED : SQUARE_SPEED, dmg = (id &lt; NUM_CIRCLES) ? CIRCLE_DAMAGE : SQUARE_DAMAGE</label></transition><transition><source ref="spawned" /><target ref="moving" /><label kind="guard">clk &gt;= speed</label><label kind="assignment">clk = 0, pos++</label></transition><transition><source ref="moving" /><target ref="moving" /><label kind="guard">clk &gt;= speed &amp;&amp; pos &lt; PATH_LENGTH - 1</label><label kind="assignment">clk = 0, pos++</label></transition><transition><source ref="moving" /><target ref="goal" /><label kind="guard">clk &gt;= speed &amp;&amp; pos == PATH_LENGTH - 1</label><label kind="assignment">clk = 0, lives = lives - dmg</label></transition><location id="done" x="300" y="-150"><name>Done</name></location><transition><source ref="goal" /><target ref="done" /><label kind="guard">clk &gt;= speed</label></transition><transition><source ref="done" /><target ref="done" /><label kind="guard">true</label></transition></template><queries><query><formula>A[] not deadlock</formula><comment>The model never reaches a deadlock.</comment></query><query><formula>E&lt;&gt; E0.goal</formula><comment>Enemy 0 (Circle) can reach the goal.</comment></query><query><formula>E&lt;&gt; E3.goal</formula><comment>Enemy 3 (Square) can reach the goal.</comment></query><query><formula>A[] lives &gt;= 0</formula><comment>Tower health never drops below zero.</comment></query></queries><template><name>GameMonitor</name><declaration>// Detects win/loss based on lives or timeout.</declaration><location id="wait" x="0" y="0"><name>Wait</name></location><location id="win" x="-150" y="0"><name>Win</name><committed /></location><location id="lose" x="150" y="0"><name>Lose</name><committed /></location><init ref="wait" /><transition><source ref="wait" /><target ref="lose" /><label kind="guard">lives &lt;= 0</label><label kind="assignment">game_over = true</label></transition><transition><source ref="wait" /><target ref="win" /><label kind="guard">timeout_reached</label><label kind="assignment">game_over = true</label></transition></template><system>
+// ==========================
+// System Declarations
+// ==========================
+
+clockTick = ClockTick();
+GM = GameMonitor();
+
+// Enemy instantiations
+E0 = Enemy(0);
+E1 = Enemy(1);
+E2 = Enemy(2);
+E3 = Enemy(3);
+E4 = Enemy(4);
+E5 = Enemy(5);
+
+system clockTick, GM, E0, E1, E2, E3, E4, E5;
+</system></nta>

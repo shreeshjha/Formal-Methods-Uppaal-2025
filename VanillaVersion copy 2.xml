@@ -133,9 +133,30 @@ int distance(int x1, int y1, int x2, int y2) {
  * @param enemy_id The ID of the enemy
  * @return Coord structure with enemy's position, or {-1,-1} if enemy is invalid
  */
+/**
+ * Gets the current position coordinates of an enemy
+ * @param enemy_id The ID of the enemy
+ * @return Coord structure with enemy's position, or {-1,-1} if enemy is invalid
+ */
 Coord get_enemy_position(int enemy_id) {
     Coord dummy = {-1, -1}; // return something safe
 
+    // Local evaluation for current automaton instance
+    if (enemy_id == id) {
+        if (hp_local &lt;= 0)
+            return dummy;
+
+        if (path_choice_local == 0 &amp;&amp; pos_local &gt;= 0 &amp;&amp; pos_local &lt; PATH_LENGTH)
+            return path[pos_local];
+
+        if (path_choice_local == 1 &amp;&amp; alt_pos_local &gt;= 0 &amp;&amp; alt_pos_local &lt; ALT_PATH1_LENGTH)
+            return alt_path1[alt_pos_local];
+
+        if (path_choice_local == 2 &amp;&amp; alt_pos_local &gt;= 0 &amp;&amp; alt_pos_local &lt; ALT_PATH2_LENGTH)
+            return alt_path2[alt_pos_local];
+    }
+
+    // Read-only for other enemies
     if (hp[enemy_id] &lt;= 0)
         return dummy;
 
@@ -150,6 +171,7 @@ Coord get_enemy_position(int enemy_id) {
 
     return dummy; // fallback for invalid cases
 }
+
 
 /**
  * Checks if an enemy is within range of a turret
@@ -189,40 +211,15 @@ bool target_available(int tx, int ty, int range) {
  * @param range Range of the turret
  */
 void fire(int tx, int ty, int damage, int range) {
-    int best_target = -1;
-    int i;
-    
-    // First check squares (enemies 3-5)
-    for (i = 3; i &lt; NUM_ENEMIES; i++) {
-        if (hp[i] &gt; 0 &amp;&amp; pos[i] &gt;= 0) {
-            Coord enemy_pos = get_enemy_position(i);
-            int d = distance(enemy_pos.x, enemy_pos.y, tx, ty);
-            
-            if (d &lt;= range &amp;&amp; (best_target == -1 || time_on_map[i] &lt; time_on_map[best_target])) {
-                best_target = i;
-            }
+    for (int i = 0; i &lt; NUM_ENEMIES; i++) {
+        Coord enemy_pos = get_enemy_position(i);
+        if (distance(enemy_pos.x, enemy_pos.y, tx, ty) &lt;= range) {
+            hp[i] = hp[i] - damage;
+            break;
         }
-    }
-    
-    // If no squares, check circles (enemies 0-2)
-    if (best_target == -1) {
-        for (i = 0; i &lt; 3; i++) {
-            if (hp[i] &gt; 0 &amp;&amp; pos[i] &gt;= 0) {
-                Coord enemy_pos = get_enemy_position(i);
-                int d = distance(enemy_pos.x, enemy_pos.y, tx, ty);
-                
-                if (d &lt;= range &amp;&amp; (best_target == -1 || time_on_map[i] &lt; time_on_map[best_target])) {
-                    best_target = i;
-                }
-            }
-        }
-    }
-    
-    // Apply damage
-    if (best_target != -1) {
-        hp[best_target] = hp[best_target] - damage;
     }
 }
+
 
 /**
  * Checks if all enemies are either killed or have reached the goal
@@ -461,6 +458,12 @@ const int DAMAGE = BASIC_DAMAGE;</declaration>
 		<parameter>int id</parameter>
 		<declaration>
 clock clk;
+int hp_local = CIRCLE_HEALTH;
+int pos_local = 0;
+int time_on_map_local = 0;
+int path_choice_local = 0;
+int alt_pos_local = 0;
+
 </declaration>
 		<location id="id12" x="-8" y="-323">
 			<name x="-18" y="-357">Spawned</name>
@@ -485,7 +488,7 @@ clock clk;
 		<transition id="id18">
 			<source ref="id12"/>
 			<target ref="id16"/>
-			<label kind="guard" x="-296" y="-357">hp[id] &lt;= 0</label>
+			<label kind="guard" x="-296" y="-357">hp_local &lt;= 0</label>
 			<nail x="-314" y="-323"/>
 			<nail x="-306" y="357"/>
 			<nail x="221" y="348"/>
@@ -498,58 +501,58 @@ clock clk;
 		<transition id="id20">
 			<source ref="id13"/>
 			<target ref="id16"/>
-			<label kind="guard" x="-262" y="276">hp[id]&lt;=0</label>
-			<label kind="assignment" x="-262" y="310">clk = 0, pos[id] = -1</label>
+			<label kind="guard" x="-262" y="276">hp_local&lt;=0</label>
+			<label kind="assignment" x="-262" y="310">clk = 0, pos_local = -1</label>
 			<nail x="-280" y="314"/>
 			<nail x="221" y="306"/>
 		</transition>
 		<transition id="id21">
 			<source ref="id13"/>
 			<target ref="id15"/>
-			<label kind="guard" x="-262" y="59">clk &gt;= get_enemy_speed(id) &amp;&amp; hp[id] &gt; 0 &amp;&amp; reached_path_end(id)</label>
+			<label kind="guard" x="-262" y="59">clk &gt;= get_enemy_speed(id) &amp;&amp; hp_local &gt; 0 &amp;&amp; reached_path_end(id)</label>
 			<label kind="assignment" x="-262" y="93">lives = lives - dmg[id], clk = 0, mark_enemy_done(id)</label>
 		</transition>
 		<transition id="id22">
 			<source ref="id14"/>
 			<target ref="id13"/>
 			<label kind="guard" x="111" y="21">true</label>
-			<label kind="assignment" x="111" y="55">clk = 0, path_choice[id] = 2, alt_pos[id] = 0</label>
+			<label kind="assignment" x="111" y="55">clk = 0, path_choice_local = 2, alt_pos_local = 0</label>
 			<nail x="93" y="153"/>
 		</transition>
 		<transition id="id23">
 			<source ref="id14"/>
 			<target ref="id13"/>
 			<label kind="guard" x="103" y="4">true</label>
-			<label kind="assignment" x="103" y="38">clk = 0, path_choice[id] = 1, alt_pos[id] = 0</label>
+			<label kind="assignment" x="103" y="38">clk = 0, path_choice_local = 1, alt_pos_local = 0</label>
 			<nail x="85" y="119"/>
 		</transition>
 		<transition id="id24">
 			<source ref="id14"/>
 			<target ref="id13"/>
 			<label kind="guard" x="94" y="-21">true</label>
-			<label kind="assignment" x="94" y="13">clk = 0, path_choice[id] = 0, update_enemy_position(id)</label>
+			<label kind="assignment" x="94" y="13">clk = 0, path_choice_local = 0, update_enemy_position(id)</label>
 			<nail x="76" y="68"/>
 		</transition>
 		<transition id="id25">
 			<source ref="id13"/>
 			<target ref="id14"/>
 			<label kind="guard" x="-262" y="-64">clk &gt;= get_enemy_speed(id) &amp;&amp; can_branch(id)</label>
-			<label kind="assignment" x="-262" y="-30">clk = 0, time_on_map[id] = time_on_map[id] + 1</label>
+			<label kind="assignment" x="-262" y="-30">clk = 0, time_on_map_local = time_on_map_local + 1</label>
 			<nail x="51" y="8"/>
 		</transition>
 		<transition id="id26">
 			<source ref="id13"/>
 			<target ref="id13"/>
 			<label kind="guard" x="-301" y="-157">clk &gt;= get_enemy_speed(id) &amp;&amp; can_move(id)</label>
-			<label kind="assignment" x="-301" y="-123">update_enemy_position(id), time_on_map[id] = time_on_map[id] + 1</label>
+			<label kind="assignment" x="-301" y="-123">update_enemy_position(id), time_on_map_local = time_on_map_local + 1</label>
 			<nail x="-323" y="-178"/>
 			<nail x="-323" y="93"/>
 		</transition>
 		<transition id="id27">
 			<source ref="id12"/>
 			<target ref="id13"/>
-			<label kind="guard" x="-263" y="-229">global_clock &gt;= spawn_time[id] &amp;&amp; hp[id] &gt; 0</label>
-			<label kind="assignment" x="-262" y="-195">pos[id] = 0, time_on_map[id] = 0</label>
+			<label kind="guard" x="-263" y="-229">global_clock &gt;= spawn_time[id] &amp;&amp; hp_local &gt; 0</label>
+			<label kind="assignment" x="-262" y="-195">pos_local = 0, time_on_map_local = 0</label>
 		</transition>
 	</template>
 	<template>
