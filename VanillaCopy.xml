@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+	<declaration>
+const int NUM_CIRCLES = 3;
+const int NUM_SQUARES = 3;
+const int NUM_ENEMIES = NUM_CIRCLES + NUM_SQUARES;
+
+const int TIMEOUT = 100;
+const int MAIN_TOWER_HEALTH = 10;
+
+const int CIRCLE_SPEED = 1;
+const int CIRCLE_HEALTH = 10;
+const int CIRCLE_DAMAGE = 2;
+
+const int SQUARE_SPEED = 3;
+const int SQUARE_HEALTH = 20;
+const int SQUARE_DAMAGE = 4;
+
+const int PATH_LENGTH = 23;
+typedef struct {
+  int x;
+  int y;
+} Coord;
+
+int spawn_time[NUM_ENEMIES] = {0, 2, 4, 1, 3, 5};
+int lives = MAIN_TOWER_HEALTH;
+int global_clock = 0;
+bool game_over = false;
+bool timeout_reached = false;
+
+const Coord path[PATH_LENGTH] = {
+  {0,0}, {1,0}, {2,0}, {3,0}, {4,0}, 
+  {4,1}, {4,2}, {4,3}, {4,4}, {5,4},
+  {6,4}, {7,4}, {8,4}, {8,5}, {8,6}, 
+  {8,7}, {9,7}, {10,7}, {11,7}, {12,7}, 
+  {13,7}, {14,7}, {15,4}
+};
+
+const Coord mainTower = {15, 4};
+</declaration>
+	<template>
+		<name>ClockTick</name>
+		<declaration>
+/** Manages the global time and timeout detection */
+clock c;
+</declaration>
+		<location id="id0" x="0" y="0">
+		</location>
+		<init ref="id0"/>
+		<transition id="id1">
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-60" y="-30">c &gt;= 1 &amp;&amp; global_clock &lt; TIMEOUT</label>
+			<label kind="assignment" x="-60" y="0">c = 0, global_clock++, timeout_reached = (global_clock &gt;= TIMEOUT)</label>
+			<nail x="-30" y="-30"/>
+			<nail x="30" y="-30"/>
+		</transition>
+		<transition id="id2">
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-60" y="-30">global_clock &gt;= TIMEOUT</label>
+			<label kind="assignment" x="-60" y="0">c = 0</label>
+			<nail x="-30" y="-30"/>
+			<nail x="30" y="-30"/>
+		</transition>
+	</template>
+	<template>
+		<name>Enemy</name>
+		<parameter>int id</parameter>
+		<declaration>
+/**
+ * Enemy automaton.
+ * Manages one enemy's spawning, movement, reaching goal, and game damage.
+ */
+
+int hp;
+int pos = 0;
+int speed;
+int dmg;
+
+</declaration>
+		<location id="id3" x="-100" y="-150">
+			<name x="-110" y="-180">Inactive</name>
+		</location>
+		<location id="id4" x="0" y="42">
+			<name x="-10" y="12">Spawned</name>
+		</location>
+		<location id="id5" x="93" y="-399">
+			<name x="83" y="-429">Moving</name>
+		</location>
+		<location id="id6" x="620" y="-399">
+			<name x="610" y="-429">Goal</name>
+		</location>
+		<location id="id7" x="926" y="-272">
+			<name x="916" y="-302">Done</name>
+		</location>
+		<init ref="id3"/>
+		<transition id="id8">
+			<source ref="id3"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-221" y="-20">global_clock &gt;= spawn_time[id]</label>
+			<label kind="assignment" x="-280" y="85">hp = (id &lt; NUM_CIRCLES) ? CIRCLE_HEALTH : SQUARE_HEALTH, 
+speed = (id &lt; NUM_CIRCLES) ? CIRCLE_SPEED : SQUARE_SPEED, 
+dmg = (id &lt; NUM_CIRCLES) ? CIRCLE_DAMAGE : SQUARE_DAMAGE</label>
+		</transition>
+		<transition id="id9">
+			<source ref="id4"/>
+			<target ref="id5"/>
+			<label kind="guard" x="0" y="-255">global_clock % speed == 0</label>
+			<label kind="assignment" x="-25" y="-221">pos++</label>
+		</transition>
+		<transition id="id10">
+			<source ref="id5"/>
+			<target ref="id5"/>
+			<label kind="guard" x="21" y="-527">global_clock % speed == 0 &amp;&amp; pos &lt; PATH_LENGTH - 1</label>
+			<label kind="assignment" x="21" y="-497">clk = 0, pos++</label>
+			<nail x="51" y="-527"/>
+			<nail x="111" y="-527"/>
+		</transition>
+		<transition id="id11">
+			<source ref="id5"/>
+			<target ref="id6"/>
+			<label kind="guard" x="238" y="-433">global_clock % speed == 0 &amp;&amp; pos == PATH_LENGTH - 1</label>
+			<label kind="assignment" x="255" y="-382">lives = lives - dmg</label>
+		</transition>
+		<transition id="id12">
+			<source ref="id6"/>
+			<target ref="id7"/>
+			<label kind="guard" x="705" y="-391">global_clock % speed == 0</label>
+		</transition>
+	</template>
+	<template>
+		<name>GameMonitor</name>
+		<declaration>// Detects win/loss based on lives or timeout.</declaration>
+		<location id="id13" x="0" y="0">
+			<name x="-10" y="-30">Wait</name>
+		</location>
+		<location id="id14" x="-348" y="0">
+			<name x="-358" y="-30">Win</name>
+		</location>
+		<location id="id15" x="365" y="0">
+			<name x="355" y="-30">Lose</name>
+		</location>
+		<init ref="id13"/>
+		<transition id="id16">
+			<source ref="id13"/>
+			<target ref="id15"/>
+			<label kind="guard" x="153" y="-25">lives &lt;= 0</label>
+			<label kind="assignment" x="136" y="8">game_over = true</label>
+		</transition>
+		<transition id="id17">
+			<source ref="id13"/>
+			<target ref="id14"/>
+			<label kind="guard" x="-229" y="-25">timeout_reached</label>
+			<label kind="assignment" x="-221" y="0">game_over = true</label>
+		</transition>
+	</template>
+	<system>
+// ==========================
+// System Declarations
+// ==========================
+
+clockTick = ClockTick();
+GM = GameMonitor();
+
+E0 = Enemy(0);
+E1 = Enemy(1);
+E2 = Enemy(2);
+E3 = Enemy(3);
+E4 = Enemy(4);
+E5 = Enemy(5);
+
+system clockTick, GM, E0, E1, E2, E3, E4, E5;
+</system>
+	<queries>
+		<query>
+			<formula>A[] not deadlock
+</formula>
+			<comment>The model never reaches a deadlock.</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; E0.Goal</formula>
+			<comment>Enemy 0 (Circle) can reach the goal.</comment>
+			<result outcome="success" type="quality" timestamp="2025-05-27 13:55:57 +0200">
+			</result>
+		</query>
+		<query>
+			<formula>E&lt;&gt; E3.Goal</formula>
+			<comment>Enemy 3 (Square) can reach the goal.</comment>
+			<result outcome="success" type="quality" timestamp="2025-05-27 13:56:08 +0200">
+			</result>
+		</query>
+		<query>
+			<formula>A[] lives &gt;= 0</formula>
+			<comment>Tower health never drops below zero.</comment>
+		</query>
+	</queries>
+</nta>
