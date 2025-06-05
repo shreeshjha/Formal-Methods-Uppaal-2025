@@ -1,0 +1,796 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC "-//Uppaal Team//DTD Flat System 1.6//EN"
+    "http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd">
+<nta>
+  <declaration>
+    ////////////////////////////////////////////////////////////////
+    //                     Global Declarations                     //
+    ////////////////////////////////////////////////////////////////
+
+    // --- Types for 3 Circles and 3 Squares ----------------------
+    typedef int[0,2] circle_id_t
+    typedef int[0,2] square_id_t
+
+    // --- Enemy Parameters (Vanilla version) ---------------------
+    const int CIRCLE_SPEED   = 1
+    const int CIRCLE_HEALTH  = 10
+    const int CIRCLE_DAMAGE  = 2
+    const int SQUARE_SPEED   = 3
+    const int SQUARE_HEALTH  = 20
+    const int SQUARE_DAMAGE  = 4
+
+    // --- Turret Parameters (Vanilla + Turrets) ------------------
+    const int BASIC_RANGE       = 2
+    const int BASIC_FIRE_SPEED  = 2
+    const int BASIC_DAMAGE      = 2
+    const int CANNON_RANGE      = 1
+    const int CANNON_FIRE_SPEED = 7
+    const int CANNON_DAMAGE     = 5
+    const int SNIPER_RANGE      = 4
+    const int SNIPER_FIRE_SPEED = 20
+    const int SNIPER_DAMAGE     = 8
+
+    // --- Main Tower Health --------------------------------------
+    const int MAIN_TOWER_HEALTH = 10
+
+    // --- Map Path Data ------------------------------------------
+    // We model a single contiguous path of length 23, plus two alternate sub‐paths.
+    typedef struct { int x; int y; } Coord
+
+    const int PATH_LENGTH = 23
+    const Coord path[PATH_LENGTH] = {
+      {0,0}, {1,0}, {2,0}, {3,0}, {4,0},
+      {4,1}, {4,2}, {4,3}, {4,4}, {5,4},
+      {6,4}, {7,4}, {8,4}, {8,5}, {8,6},
+      {8,7}, {9,7}, {10,7}, {11,7}, {12,7},
+      {13,7}, {14,7}, {15,4}
+    }
+
+    const int ALT_PATH1_LENGTH = 10
+    const Coord alt_path1[ALT_PATH1_LENGTH] = {
+      {7,3}, {7,2}, {7,1}, {8,1}, {9,1},
+      {10,1}, {11,1}, {12,1}, {13,1}, {14,1}
+    }
+
+    const int ALT_PATH2_LENGTH = 5
+    const Coord alt_path2[ALT_PATH2_LENGTH] = {
+      {10,6}, {10,5}, {11,5}, {12,5}, {13,5}
+    }
+
+    // --- Branch Indices on the Main Path ------------------------
+    // Index 11 corresponds to (7,4); Index 17 corresponds to (10,7)
+    const int BRANCH_INDEX1 = 11
+    const int BRANCH_INDEX2 = 17
+
+    // --- Arrays for 3 Circles ------------------------------------
+    int pos_circle[circle_id_t]        = {0,  0,  0}
+    int hp_circle[circle_id_t]         = {CIRCLE_HEALTH, CIRCLE_HEALTH, CIRCLE_HEALTH}
+    int dmg_circle[circle_id_t]        = {CIRCLE_DAMAGE, CIRCLE_DAMAGE, CIRCLE_DAMAGE}
+    int spawn_circle[circle_id_t]      = {0,  2,  4}
+    int time_circle[circle_id_t]       = {0,  0,  0}
+    int path_choice_circle[circle_id_t] = {0, 0, 0}
+    int alt_pos_circle[circle_id_t]     = {0, 0, 0}
+
+    // --- Arrays for 3 Squares ------------------------------------
+    int pos_square[square_id_t]        = {0,  0,  0}
+    int hp_square[square_id_t]         = {SQUARE_HEALTH, SQUARE_HEALTH, SQUARE_HEALTH}
+    int dmg_square[square_id_t]        = {SQUARE_DAMAGE, SQUARE_DAMAGE, SQUARE_DAMAGE}
+    int spawn_square[square_id_t]      = {0,  3,  6}
+    int time_square[square_id_t]       = {0,  0,  0}
+    int path_choice_square[square_id_t] = {0, 0, 0}
+    int alt_pos_square[square_id_t]     = {0, 0, 0}
+
+    // --- Game State ----------------------------------------------
+    int lives = MAIN_TOWER_HEALTH
+    bool game_over = false
+
+    // --- Global Clock (integer) ----------------------------------
+    int global_clock = 0
+
+    // --- Enable or disable branching at path nodes (to cut down state‐space) ---
+    const bool allow_branching = false
+
+    // --- Distance helper -----------------------------------------
+    int distance(int x1, int y1, int x2, int y2) {
+      return abs(x1 - x2) + abs(y1 - y2)
+    }
+
+    // --- Check if a given circle has reached the end of its chosen path ---
+    bool reached_end_circle(circle_id_t id) {
+      if (path_choice_circle[id] == 0) {
+        return pos_circle[id] &gt;= PATH_LENGTH - 1
+      } else if (path_choice_circle[id] == 1) {
+        return alt_pos_circle[id] &gt;= ALT_PATH1_LENGTH - 1
+      } else {
+        return alt_pos_circle[id] &gt;= ALT_PATH2_LENGTH - 1
+      }
+    }
+
+    // --- Check if a given square has reached the end of its chosen path ---
+    bool reached_end_square(square_id_t id) {
+      if (path_choice_square[id] == 0) {
+        return pos_square[id] &gt;= PATH_LENGTH - 1
+      } else if (path_choice_square[id] == 1) {
+        return alt_pos_square[id] &gt;= ALT_PATH1_LENGTH - 1
+      } else {
+        return alt_pos_square[id] &gt;= ALT_PATH2_LENGTH - 1
+      }
+    }
+
+    // --- Are all enemies (circles & squares) either done or not on‐map? ---
+    bool all_enemies_gone() {
+      int i
+      for (i = 0; i < 3; i++) {
+        if (
+          (path_choice_circle[i] == 0 && pos_circle[i] &gt;= 0 && pos_circle[i] < PATH_LENGTH)
+          || (path_choice_circle[i] == 1 && alt_pos_circle[i] &gt;= 0 && alt_pos_circle[i] < ALT_PATH1_LENGTH)
+          || (path_choice_circle[i] == 2 && alt_pos_circle[i] &gt;= 0 && alt_pos_circle[i] < ALT_PATH2_LENGTH)
+        ) {
+          return false
+        }
+      }
+      for (i = 0; i < 3; i++) {
+        if (
+          (path_choice_square[i] == 0 && pos_square[i] &gt;= 0 && pos_square[i] < PATH_LENGTH)
+          || (path_choice_square[i] == 1 && alt_pos_square[i] &gt;= 0 && alt_pos_square[i] < ALT_PATH1_LENGTH)
+          || (path_choice_square[i] == 2 && alt_pos_square[i] &gt;= 0 && alt_pos_square[i] < ALT_PATH2_LENGTH)
+        ) {
+          return false
+        }
+      }
+      return true
+    }
+
+    // --- Mark a circle as “done” by setting its pos or alt_pos to –1 ---
+    void mark_circle_done(circle_id_t id) {
+      if (path_choice_circle[id] == 0) {
+        pos_circle[id] = -1
+      } else {
+        alt_pos_circle[id] = -1
+      }
+    }
+
+    // --- Mark a square as “done” by setting its pos or alt_pos to –1 ---
+    void mark_square_done(square_id_t id) {
+      if (path_choice_square[id] == 0) {
+        pos_square[id] = -1
+      } else {
+        alt_pos_square[id] = -1
+      }
+    }
+  </declaration>
+
+  <!-- ===================== EnemyCircle Template ===================== -->
+  <template>
+    <name>EnemyCircle</name>
+    <parameter>circle_id_t id</parameter>
+    <declaration>clock clk</declaration>
+
+    <!-- Locations for Circle id -->
+    <location id="EC_NotActive">
+      <name>NotActive</name>
+    </location>
+    <location id="EC_Spawned">
+      <name>Spawned</name>
+      <committed/>
+    </location>
+    <location id="EC_Moving">
+      <name>Moving</name>
+    </location>
+    <location id="EC_AtBranch">
+      <name>AtBranch</name>
+      <committed/>
+    </location>
+    <location id="EC_Goal">
+      <name>Goal</name>
+    </location>
+    <location id="EC_Killed">
+      <name>Killed</name>
+      <committed/>
+    </location>
+    <init ref="EC_NotActive"/>
+
+    <!-- 1) NotActive → Spawned when spawn time reached -->
+    <transition>
+      <source ref="EC_NotActive"/>
+      <target ref="EC_Spawned"/>
+      <label kind="guard">
+        global_clock &gt;= spawn_circle[id] &amp;&amp; !game_over
+      </label>
+    </transition>
+
+    <!-- 2) Spawned → Killed if hp ≤ 0 -->
+    <transition>
+      <source ref="EC_Spawned"/>
+      <target ref="EC_Killed"/>
+      <label kind="guard">
+        hp_circle[id] &lt;= 0
+      </label>
+    </transition>
+
+    <!-- 3) Spawned → Moving if hp > 0 -->
+    <transition>
+      <source ref="EC_Spawned"/>
+      <target ref="EC_Moving"/>
+      <label kind="guard">
+        hp_circle[id] &gt; 0
+      </label>
+      <label kind="assignment">
+        pos_circle[id] = 0, time_circle[id] = 0, clk = 0
+      </label>
+    </transition>
+
+    <!-- 4) Moving → Killed if hp ≤ 0 -->
+    <transition>
+      <source ref="EC_Moving"/>
+      <target ref="EC_Killed"/>
+      <label kind="guard">
+        hp_circle[id] &lt;= 0 &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, mark_circle_done(id)
+      </label>
+    </transition>
+
+    <!-- 5) Moving → Goal if speed passed, not killed, and at path end -->
+    <transition>
+      <source ref="EC_Moving"/>
+      <target ref="EC_Goal"/>
+      <label kind="guard">
+        clk &gt;= CIRCLE_SPEED
+        &amp;&amp; hp_circle[id] &gt; 0
+        &amp;&amp; reached_end_circle(id)
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        lives = lives - dmg_circle[id], clk = 0, mark_circle_done(id)
+      </label>
+    </transition>
+
+    <!-- 6) Moving → AtBranch if at one of the two branch points -->
+    <transition>
+      <source ref="EC_Moving"/>
+      <target ref="EC_AtBranch"/>
+      <label kind="guard">
+        clk &gt;= CIRCLE_SPEED
+        &amp;&amp; hp_circle[id] &gt; 0
+        &amp;&amp; (pos_circle[id] == BRANCH_INDEX1 || pos_circle[id] == BRANCH_INDEX2)
+        &amp;&amp; allow_branching
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, time_circle[id] = time_circle[id] + 1
+      </label>
+    </transition>
+
+    <!-- 7) Moving → Moving if can move forward (not at branch and not done) -->
+    <transition>
+      <source ref="EC_Moving"/>
+      <target ref="EC_Moving"/>
+      <label kind="guard">
+        clk &gt;= CIRCLE_SPEED
+        &amp;&amp; hp_circle[id] &gt; 0
+        &amp;&amp; pos_circle[id] &lt; PATH_LENGTH - 1
+        &amp;&amp; pos_circle[id] != BRANCH_INDEX1
+        &amp;&amp; pos_circle[id] != BRANCH_INDEX2
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        pos_circle[id] = pos_circle[id] + 1, time_circle[id] = time_circle[id] + 1, clk = 0
+      </label>
+    </transition>
+
+    <!-- 8a) AtBranch → Moving if choose alternate path 1 -->
+    <transition>
+      <source ref="EC_AtBranch"/>
+      <target ref="EC_Moving"/>
+      <label kind="guard">
+        !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, path_choice_circle[id] = 1, alt_pos_circle[id] = 0
+      </label>
+    </transition>
+
+    <!-- 8b) AtBranch → Moving if choose alternate path 2 -->
+    <transition>
+      <source ref="EC_AtBranch"/>
+      <target ref="EC_Moving"/>
+      <label kind="guard">
+        !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, path_choice_circle[id] = 2, alt_pos_circle[id] = 0
+      </label>
+    </transition>
+  </template>
+
+  <!-- ===================== EnemySquare Template ===================== -->
+  <template>
+    <name>EnemySquare</name>
+    <parameter>square_id_t id</parameter>
+    <declaration>clock clk</declaration>
+
+    <!-- Locations for Square id -->
+    <location id="ES_NotActive">
+      <name>NotActive</name>
+    </location>
+    <location id="ES_Spawned">
+      <name>Spawned</name>
+      <committed/>
+    </location>
+    <location id="ES_Moving">
+      <name>Moving</name>
+    </location>
+    <location id="ES_AtBranch">
+      <name>AtBranch</name>
+      <committed/>
+    </location>
+    <location id="ES_Goal">
+      <name>Goal</name>
+    </location>
+    <location id="ES_Killed">
+      <name>Killed</name>
+      <committed/>
+    </location>
+    <init ref="ES_NotActive"/>
+
+    <!-- 1) NotActive → Spawned when spawn time reached -->
+    <transition>
+      <source ref="ES_NotActive"/>
+      <target ref="ES_Spawned"/>
+      <label kind="guard">
+        global_clock &gt;= spawn_square[id] &amp;&amp; !game_over
+      </label>
+    </transition>
+
+    <!-- 2) Spawned → Killed if hp ≤ 0 -->
+    <transition>
+      <source ref="ES_Spawned"/>
+      <target ref="ES_Killed"/>
+      <label kind="guard">
+        hp_square[id] &lt;= 0
+      </label>
+    </transition>
+
+    <!-- 3) Spawned → Moving if hp > 0 -->
+    <transition>
+      <source ref="ES_Spawned"/>
+      <target ref="ES_Moving"/>
+      <label kind="guard">
+        hp_square[id] &gt; 0
+      </label>
+      <label kind="assignment">
+        pos_square[id] = 0, time_square[id] = 0, clk = 0
+      </label>
+    </transition>
+
+    <!-- 4) Moving → Killed if hp ≤ 0 -->
+    <transition>
+      <source ref="ES_Moving"/>
+      <target ref="ES_Killed"/>
+      <label kind="guard">
+        hp_square[id] &lt;= 0 &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, mark_square_done(id)
+      </label>
+    </transition>
+
+    <!-- 5) Moving → Goal if speed passed, not killed, and at path end -->
+    <transition>
+      <source ref="ES_Moving"/>
+      <target ref="ES_Goal"/>
+      <label kind="guard">
+        clk &gt;= SQUARE_SPEED
+        &amp;&amp; hp_square[id] &gt; 0
+        &amp;&amp; reached_end_square(id)
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        lives = lives - dmg_square[id], clk = 0, mark_square_done(id)
+      </label>
+    </transition>
+
+    <!-- 6) Moving → AtBranch if at one of the two branch points -->
+    <transition>
+      <source ref="ES_Moving"/>
+      <target ref="ES_AtBranch"/>
+      <label kind="guard">
+        clk &gt;= SQUARE_SPEED
+        &amp;&amp; hp_square[id] &gt; 0
+        &amp;&amp; (pos_square[id] == BRANCH_INDEX1 || pos_square[id] == BRANCH_INDEX2)
+        &amp;&amp; allow_branching
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, time_square[id] = time_square[id] + 1
+      </label>
+    </transition>
+
+    <!-- 7) Moving → Moving if can move forward (not at branch and not done) -->
+    <transition>
+      <source ref="ES_Moving"/>
+      <target ref="ES_Moving"/>
+      <label kind="guard">
+        clk &gt;= SQUARE_SPEED
+        &amp;&amp; hp_square[id] &gt; 0
+        &amp;&amp; pos_square[id] &lt; PATH_LENGTH - 1
+        &amp;&amp; pos_square[id] != BRANCH_INDEX1
+        &amp;&amp; pos_square[id] != BRANCH_INDEX2
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        pos_square[id] = pos_square[id] + 1, time_square[id] = time_square[id] + 1, clk = 0
+      </label>
+    </transition>
+
+    <!-- 8a) AtBranch → Moving if choose alternate path 1 -->
+    <transition>
+      <source ref="ES_AtBranch"/>
+      <target ref="ES_Moving"/>
+      <label kind="guard">
+        !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, path_choice_square[id] = 1, alt_pos_square[id] = 0
+      </label>
+    </transition>
+
+    <!-- 8b) AtBranch → Moving if choose alternate path 2 -->
+    <transition>
+      <source ref="ES_AtBranch"/>
+      <target ref="ES_Moving"/>
+      <label kind="guard">
+        !game_over
+      </label>
+      <label kind="assignment">
+        clk = 0, path_choice_square[id] = 2, alt_pos_square[id] = 0
+      </label>
+    </transition>
+  </template>
+
+  <!-- ===================== BasicTurret Template ===================== -->
+  <template>
+    <name>BasicTurret</name>
+    <parameter>int tx,int ty</parameter>
+    <declaration>
+      clock t
+      const int RANGE = BASIC_RANGE
+      const int FIRE_RATE = BASIC_FIRE_SPEED
+      const int DAMAGE = BASIC_DAMAGE
+    </declaration>
+
+    <location id="BT_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="BT_Firing">
+      <name>Firing</name>
+      <committed/>
+    </location>
+    <init ref="BT_Idle"/>
+
+    <!-- When in Idle, wait until (t ≥ FIRE_RATE AND target exists AND not game_over) -->
+    <transition>
+      <source ref="BT_Idle"/>
+      <target ref="BT_Firing"/>
+      <label kind="guard">
+        t &gt;= FIRE_RATE
+        &amp;&amp; target_available(tx,ty,RANGE)
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        t = 0, fire(tx,ty,DAMAGE,RANGE)
+      </label>
+    </transition>
+
+    <!-- After firing, immediately return to Idle -->
+    <transition>
+      <source ref="BT_Firing"/>
+      <target ref="BT_Idle"/>
+      <label kind="guard">true</label>
+      <!-- No assignment needed; turret just returns to Idle -->
+    </transition>
+  </template>
+
+  <!-- ===================== CannonTurret Template ===================== -->
+  <template>
+    <name>CannonTurret</name>
+    <parameter>int tx,int ty</parameter>
+    <declaration>
+      clock t
+      const int RANGE = CANNON_RANGE
+      const int FIRE_RATE = CANNON_FIRE_SPEED
+      const int DAMAGE = CANNON_DAMAGE
+    </declaration>
+
+    <location id="CT_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="CT_Firing">
+      <name>Firing</name>
+      <committed/>
+    </location>
+    <init ref="CT_Idle"/>
+
+    <transition>
+      <source ref="CT_Idle"/>
+      <target ref="CT_Firing"/>
+      <label kind="guard">
+        t &gt;= FIRE_RATE
+        &amp;&amp; target_available(tx,ty,RANGE)
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        t = 0, fire(tx,ty,DAMAGE,RANGE)
+      </label>
+    </transition>
+
+    <transition>
+      <source ref="CT_Firing"/>
+      <target ref="CT_Idle"/>
+      <label kind="guard">true</label>
+    </transition>
+  </template>
+
+  <!-- ===================== SniperTurret Template ===================== -->
+  <template>
+    <name>SniperTurret</name>
+    <parameter>int tx,int ty</parameter>
+    <declaration>
+      clock t
+      const int RANGE = SNIPER_RANGE
+      const int FIRE_RATE = SNIPER_FIRE_SPEED
+      const int DAMAGE = SNIPER_DAMAGE
+    </declaration>
+
+    <location id="ST_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="ST_Firing">
+      <name>Firing</name>
+      <committed/>
+    </location>
+    <init ref="ST_Idle"/>
+
+    <transition>
+      <source ref="ST_Idle"/>
+      <target ref="ST_Firing"/>
+      <label kind="guard">
+        t &gt;= FIRE_RATE
+        &amp;&amp; target_available(tx,ty,RANGE)
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        t = 0, fire(tx,ty,DAMAGE,RANGE)
+      </label>
+    </transition>
+
+    <transition>
+      <source ref="ST_Firing"/>
+      <target ref="ST_Idle"/>
+      <label kind="guard">true</label>
+    </transition>
+  </template>
+
+  <!-- ===================== GameMonitor Template ===================== -->
+  <template>
+    <name>GameMonitor</name>
+    <location id="GM_Wait">
+      <name>Wait</name>
+    </location>
+    <location id="GM_Win">
+      <name>WinState</name>
+      <committed/>
+    </location>
+    <location id="GM_Lose">
+      <name>LoseState</name>
+      <committed/>
+    </location>
+    <location id="GM_Timeout">
+      <name>TimeoutState</name>
+      <committed/>
+    </location>
+    <location id="GM_Done">
+      <name>Done</name>
+    </location>
+    <init ref="GM_Wait"/>
+
+    <!-- If TIMEOUT or lives ≤ 0, go to Timeout immediately -->
+    <transition>
+      <source ref="GM_Wait"/>
+      <target ref="GM_Timeout"/>
+      <label kind="guard">
+        global_clock &gt;= TIMEOUT
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        game_over = true
+      </label>
+    </transition>
+
+    <!-- If all enemies gone and lives ≤ 0, go to Lose -->
+    <transition>
+      <source ref="GM_Wait"/>
+      <target ref="GM_Lose"/>
+      <label kind="guard">
+        all_enemies_gone()
+        &amp;&amp; lives &lt;= 0
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        game_over = true
+      </label>
+    </transition>
+
+    <!-- If all enemies gone and lives > 0, go to Win -->
+    <transition>
+      <source ref="GM_Wait"/>
+      <target ref="GM_Win"/>
+      <label kind="guard">
+        all_enemies_gone()
+        &amp;&amp; lives &gt; 0
+        &amp;&amp; !game_over
+      </label>
+      <label kind="assignment">
+        game_over = true
+      </label>
+    </transition>
+
+    <!-- Final “Done” state after Win, Lose, or Timeout -->
+    <transition>
+      <source ref="GM_Win"/>
+      <target ref="GM_Done"/>
+    </transition>
+    <transition>
+      <source ref="GM_Lose"/>
+      <target ref="GM_Done"/>
+    </transition>
+    <transition>
+      <source ref="GM_Timeout"/>
+      <target ref="GM_Done"/>
+    </transition>
+  </template>
+
+  <!-- ===================== IntegerTick Template ===================== -->
+  <template>
+    <name>IntegerTick</name>
+    <declaration/>
+    <location id="T0">
+      <name>T0</name>
+      <committed/>
+    </location>
+    <location id="T1">
+      <name>T1</name>
+    </location>
+    <init ref="T0"/>
+
+    <!-- T0 → T1 increments global_clock by 1 -->
+    <transition>
+      <source ref="T0"/>
+      <target ref="T1"/>
+      <label kind="assignment">
+        global_clock = global_clock + 1
+      </label>
+    </transition>
+
+    <!-- T1 → T0 (no condition) to allow continuous ticking -->
+    <transition>
+      <source ref="T1"/>
+      <target ref="T0"/>
+      <label kind="assignment"/>
+    </transition>
+  </template>
+
+  <!-- ===================== System Declaration ===================== -->
+  <system>
+    EC0 = EnemyCircle(0)
+    EC1 = EnemyCircle(1)
+    EC2 = EnemyCircle(2)
+    ES0 = EnemySquare(0)
+    ES1 = EnemySquare(1)
+    ES2 = EnemySquare(2)
+
+    BT0 = BasicTurret(5,5)
+    CT0 = CannonTurret(8,2)
+    CT1 = CannonTurret(8,6)
+    CT2 = CannonTurret(14,2)
+    CT3 = CannonTurret(14,6)
+    ST0 = SniperTurret(2,3)
+    ST1 = SniperTurret(11,5)
+
+    GM   = GameMonitor()
+    TICK = IntegerTick()
+
+    system EC0, EC1, EC2, ES0, ES1, ES2,
+           BT0, CT0, CT1, CT2, CT3, ST0, ST1,
+           GM, TICK
+  </system>
+
+  <!-- ===================== Queries ===================== -->
+  <queries>
+    <!-- 1) Check that no deadlock ever occurs -->
+    <query>
+      <formula>A[] not deadlock</formula>
+      <option key="--exploration"           value="0"/>
+      <option key="--state-representation"   value="2"/>
+      <option key="--search-order"           value="0"/>
+      <option key="--symmetry-reduction"     value="on"/>
+      <option key="--statespace-consumption" value="3"/>
+      <option key="--diagnostic"             value="-1"/>
+    </query>
+
+    <!-- 2) Circles must reach “Moving” (i.e., start moving) by global_clock ≤ 22 -->
+    <query>
+      <formula>
+        A[] (
+          EC0.Moving imply global_clock &lt;= 22
+        )
+        &amp;&amp;
+        (
+          EC1.Moving imply global_clock &lt;= 22
+        )
+        &amp;&amp;
+        (
+          EC2.Moving imply global_clock &lt;= 22
+        )
+      </formula>
+      <comment>All circles start moving by time 22 (n × c = 22 for n=11,c=1)</comment>
+    </query>
+
+    <!-- 3) Squares must reach “Moving” by global_clock ≤ 66 -->
+    <query>
+      <formula>
+        A[] (
+          ES0.Moving imply global_clock &lt;= 66
+        )
+        &amp;&amp;
+        (
+          ES1.Moving imply global_clock &lt;= 66
+        )
+        &amp;&amp;
+        (
+          ES2.Moving imply global_clock &lt;= 66
+        )
+      </formula>
+      <comment>All squares start moving by time 66 (n × s = 22×3 = 66)</comment>
+    </query>
+
+    <!-- 4) Enemies always remain on‐path or become “done” (pos or alt_pos == -1) -->
+    <query>
+      <formula>
+        A[] (
+          forall (i: circle_id_t) (
+            (pos_circle[i] &gt;= 0 &amp;&amp; pos_circle[i] &lt; PATH_LENGTH)
+            || (path_choice_circle[i] == 1 &amp;&amp; alt_pos_circle[i] &gt;= 0 &amp;&amp; alt_pos_circle[i] &lt; ALT_PATH1_LENGTH)
+            || (path_choice_circle[i] == 2 &amp;&amp; alt_pos_circle[i] &gt;= 0 &amp;&amp; alt_pos_circle[i] &lt; ALT_PATH2_LENGTH)
+            || pos_circle[i] == -1
+          )
+        )
+        &amp;&amp;
+        (
+          forall (j: square_id_t) (
+            (pos_square[j] &gt;= 0 &amp;&amp; pos_square[j] &lt; PATH_LENGTH)
+            || (path_choice_square[j] == 1 &amp;&amp; alt_pos_square[j] &gt;= 0 &amp;&amp; alt_pos_square[j] &lt; ALT_PATH1_LENGTH)
+            || (path_choice_square[j] == 2 &amp;&amp; alt_pos_square[j] &gt;= 0 &amp;&amp; alt_pos_square[j] &lt; ALT_PATH2_LENGTH)
+            || pos_square[j] == -1
+          )
+        )
+      </formula>
+      <comment>All enemies stay on valid path indices or are “done”</comment>
+    </query>
+
+    <!-- 5) It is possible to eventually Win (circles/squares + turrets config) -->
+    <query>
+      <formula>E&lt;&gt; GameMonitor.WinState</formula>
+      <comment>Exists a run under configuration VI (7 turrets) where we reach WinState</comment>
+    </query>
+
+    <!-- 6) All circles must have reached “Moving” by time 23 (for stricter check) -->
+    <query>
+      <formula>E&lt;&gt; (GameMonitor.WinState &amp;&amp; global_clock &lt;= 23)</formula>
+      <comment>Exists a winning run where all circles finish by time 23</comment>
+    </query>
+  </queries>
+</nta>
+

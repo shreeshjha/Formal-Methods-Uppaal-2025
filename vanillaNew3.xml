@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+  <declaration>
+    const int NUM_ENEMIES = 2;           
+    const int TIMEOUT = 50;              
+    const int MAX_PATH_LENGTH = 22;      
+
+    const int CIRCLE_SPEED  = 1;         
+    const int CIRCLE_HEALTH = 10;        
+    const int CIRCLE_DAMAGE = 2;         
+    const int SQUARE_SPEED  = 3;         
+    const int SQUARE_HEALTH = 20;        
+    const int SQUARE_DAMAGE = 4;         
+
+    const int spawn_times[NUM_ENEMIES] = {0, 2};
+    const int MAIN_TOWER_HEALTH = 10;
+    int lives = MAIN_TOWER_HEALTH;
+
+    int global_clock = 0;             
+    bool game_over = false;           
+    bool timeout_reached = false;     
+
+    int enemy_health[NUM_ENEMIES];        
+    int enemy_damage[NUM_ENEMIES];        
+    int enemy_position[NUM_ENEMIES];      
+    int enemy_spawn_time[NUM_ENEMIES];    
+    bool enemy_spawned[NUM_ENEMIES];      
+    bool enemy_alive[NUM_ENEMIES];        
+    int enemy_move_counter[NUM_ENEMIES];  
+
+    broadcast chan clock_tick;
+
+    void init_game() {
+        int i;
+        lives = MAIN_TOWER_HEALTH;
+        global_clock = 0;
+        game_over = false;
+        timeout_reached = false;
+
+        for (i = 0; i &lt; NUM_ENEMIES; i++) {
+            if (i == 0) {
+                enemy_health[i] = CIRCLE_HEALTH;
+                enemy_damage[i] = CIRCLE_DAMAGE;
+            } else {
+                enemy_health[i] = SQUARE_HEALTH;
+                enemy_damage[i] = SQUARE_DAMAGE;
+            }
+
+            enemy_spawn_time[i]     = spawn_times[i];
+            enemy_position[i]       = -1;  
+            enemy_spawned[i]        = false;
+            enemy_alive[i]          = true;
+            enemy_move_counter[i]   = 0;
+        }
+    }
+
+    int get_enemy_speed(int i) {
+        if (i == 0) return CIRCLE_SPEED;
+        else        return SQUARE_SPEED;
+    }
+
+    bool can_move_forward(int i) {
+        return enemy_alive[i] &amp;&amp; 
+               enemy_spawned[i] &amp;&amp; 
+               enemy_position[i] &gt;= 0 &amp;&amp; 
+               enemy_position[i] &lt; MAX_PATH_LENGTH &amp;&amp;
+               enemy_health[i] &gt; 0;
+    }
+
+    bool enemy_reached_goal(int i) {
+        return enemy_alive[i] &amp;&amp; 
+               enemy_spawned[i] &amp;&amp; 
+               enemy_position[i] &gt;= MAX_PATH_LENGTH;
+    }
+
+    void move_enemy_forward(int i) {
+        if (can_move_forward(i)) {
+            enemy_position[i] = enemy_position[i] + 1;
+        }
+    }
+
+    void remove_enemy_from_map(int i) {
+        enemy_position[i] = -1;
+        enemy_spawned[i] = false;
+        enemy_alive[i] = false;
+    }
+
+    bool all_enemies_gone() {
+        int i;
+        for (i = 0; i &lt; NUM_ENEMIES; i++) {
+            if (enemy_spawned[i] &amp;&amp; enemy_alive[i] &amp;&amp; enemy_position[i] &gt;= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool enemy_on_valid_path(int i) {
+        if (!enemy_spawned[i] || !enemy_alive[i]) {
+            return true;
+        }
+        return (enemy_position[i] &gt;= 0 &amp;&amp; enemy_position[i] &lt;= MAX_PATH_LENGTH);
+    }
+
+  </declaration>
+
+	<template>
+		<name x="5" y="5">GameClock</name>
+		<declaration>
+clock c;
+		</declaration>
+		<location id="id0" x="0" y="0">
+			<name x="-10" y="-34">Ticking</name>
+			<label kind="invariant" x="-10" y="17">c &lt;= 1</label>
+		</location>
+		<init ref="id0"/>
+		<transition>
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-200" y="50">c &gt;= 1 &amp;&amp; global_clock &lt; TIMEOUT &amp;&amp; !game_over</label>
+			<label kind="synchronisation" x="-200" y="70">clock_tick!</label>
+			<label kind="assignment" x="-200" y="90">c = 0, global_clock = global_clock + 1</label>
+			<nail x="0" y="120"/>
+			<nail x="-150" y="0"/>
+		</transition>
+		<transition>
+			<source ref="id0"/>
+			<target ref="id0"/>
+			<label kind="guard" x="50" y="50">c &gt;= 1 &amp;&amp; global_clock &gt;= TIMEOUT</label>
+			<label kind="assignment" x="50" y="80">timeout_reached = true, game_over = true</label>
+			<nail x="0" y="120"/>
+			<nail x="150" y="0"/>
+		</transition>
+	</template>
+
+	<template>
+		<name>Enemy</name>
+		<parameter>int id</parameter>
+		<declaration>
+// No local clocks - use counters and synchronization
+		</declaration>
+		<location id="id1" x="-200" y="-100">
+			<name x="-210" y="-134">NotSpawned</name>
+		</location>
+		<location id="id2" x="0" y="-100">
+			<name x="-10" y="-134">OnMap</name>
+		</location>
+		<location id="id3" x="100" y="-100">
+			<name x="90" y="-134">Moving</name>
+			<committed/>
+		</location>
+		<location id="id4" x="0" y="100">
+			<name x="-10" y="66">Dead</name>
+		</location>
+		<location id="id5" x="200" y="100">
+			<name x="190" y="66">ReachedGoal</name>
+		</location>
+		<init ref="id1"/>
+		
+		<transition>
+			<source ref="id1"/>
+			<target ref="id2"/>
+			<label kind="guard" x="-150" y="-150">global_clock &gt;= enemy_spawn_time[id] &amp;&amp; !game_over</label>
+			<label kind="assignment" x="-150" y="-120">enemy_spawned[id] = true, 
+enemy_position[id] = 0, 
+enemy_move_counter[id] = 0</label>
+		</transition>
+		
+		<transition>
+			<source ref="id2"/>
+			<target ref="id3"/>
+			<label kind="synchronisation" x="-50" y="-150">clock_tick?</label>
+			<label kind="guard" x="-50" y="-130">enemy_health[id] &gt; 0</label>
+		</transition>
+		
+		<transition>
+			<source ref="id3"/>
+			<target ref="id2"/>
+			<label kind="guard" x="150" y="-150">enemy_move_counter[id] &gt;= get_enemy_speed(id) &amp;&amp; 
+can_move_forward(id)</label>
+			<label kind="assignment" x="150" y="-120">move_enemy_forward(id), 
+enemy_move_counter[id] = 0</label>
+			<nail x="200" y="-100"/>
+			<nail x="200" y="-50"/>
+			<nail x="0" y="-50"/>
+		</transition>
+		
+		<transition>
+			<source ref="id3"/>
+			<target ref="id2"/>
+			<label kind="guard" x="150" y="-200">enemy_move_counter[id] &lt; get_enemy_speed(id) &amp;&amp;
+can_move_forward(id)</label>
+			<label kind="assignment" x="150" y="-170">enemy_move_counter[id] = enemy_move_counter[id] + 1</label>
+			<nail x="200" y="-150"/>
+			<nail x="200" y="-25"/>
+			<nail x="0" y="-25"/>
+		</transition>
+		
+		<transition>
+			<source ref="id3"/>
+			<target ref="id5"/>
+			<label kind="guard" x="150" y="0">enemy_position[id] &gt;= MAX_PATH_LENGTH</label>
+			<label kind="assignment" x="150" y="20">lives = lives - enemy_damage[id],
+remove_enemy_from_map(id)</label>
+		</transition>
+		
+		<transition>
+			<source ref="id2"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-100" y="0">enemy_health[id] &lt;= 0</label>
+			<label kind="assignment" x="-100" y="20">remove_enemy_from_map(id)</label>
+		</transition>
+		
+		<transition>
+			<source ref="id3"/>
+			<target ref="id4"/>
+			<label kind="guard" x="50" y="0">enemy_health[id] &lt;= 0</label>
+			<label kind="assignment" x="50" y="20">remove_enemy_from_map(id)</label>
+		</transition>
+	</template>
+
+	<template>
+		<name>GameManager</name>
+		<declaration>
+// Manages game state and win/lose conditions
+		</declaration>
+		<location id="id6" x="0" y="0">
+			<name x="-10" y="-34">Running</name>
+		</location>
+		<location id="id7" x="-200" y="0">
+			<name x="-210" y="-34">Victory</name>
+		</location>
+		<location id="id8" x="200" y="0">
+			<name x="190" y="-34">Defeat</name>
+		</location>
+		<location id="id9" x="0" y="200">
+			<name x="-10" y="166">Timeout</name>
+		</location>
+		<init ref="id6"/>
+		
+		<transition>
+			<source ref="id6"/>
+			<target ref="id7"/>
+			<label kind="guard" x="-150" y="-50">all_enemies_gone() &amp;&amp; lives &gt; 0</label>
+			<label kind="assignment" x="-150" y="-20">game_over = true</label>
+		</transition>
+		
+		<transition>
+			<source ref="id6"/>
+			<target ref="id8"/>
+			<label kind="guard" x="50" y="-50">lives &lt;= 0</label>
+			<label kind="assignment" x="50" y="-20">game_over = true</label>
+		</transition>
+		
+		<transition>
+			<source ref="id6"/>
+			<target ref="id9"/>
+			<label kind="guard" x="-50" y="100">timeout_reached</label>
+		</transition>
+	</template>
+
+	<system>
+// Initialize game state
+init_game();
+
+// Instantiate system components
+clock = GameClock();
+gameManager = GameManager();
+
+// Create 2 enemies for faster verification
+enemy0 = Enemy(0);  // Circle
+enemy1 = Enemy(1);  // Square
+
+// System composition
+system clock, gameManager, enemy0, enemy1;
+	</system>
+
+	<queries>
+		<query>
+			<formula>A[] not deadlock</formula>
+			<comment>Property I: The game never reaches a deadlock state (optimized)</comment>
+		</query>
+
+		<query>
+			<formula>E&lt;&gt; (enemy0.ReachedGoal)</formula>
+			<comment>Property II: Enemy 0 can reach the Main Tower</comment>
+		</query>
+
+		<query>
+			<formula>E&lt;&gt; (enemy1.ReachedGoal)</formula>
+			<comment>Property II: Enemy 1 can reach the Main Tower</comment>
+		</query>
+
+		<query>
+			<formula>A[] (enemy0.ReachedGoal imply global_clock &lt;= 22)</formula>
+			<comment>Property III: Circle reaches Main Tower in no more than n*c time units</comment>
+		</query>
+		
+		<query>
+			<formula>A[] (enemy1.ReachedGoal imply global_clock &lt;= 69)</formula>
+			<comment>Property IV: Square reaches Main Tower in no more than n*s + spawn_time</comment>
+		</query>
+
+		<query>
+			<formula>A[] forall (i : int[0, NUM_ENEMIES-1]) enemy_on_valid_path(i)</formula>
+			<comment>Property V: All enemies never leave the valid path</comment>
+		</query>
+
+		<query>
+			<formula>A[] (global_clock &lt;= 30 imply not deadlock)</formula>
+			<comment>Bounded deadlock freedom check (faster verification)</comment>
+		</query>
+
+		<query>
+			<formula>E&lt;&gt; gameManager.Victory</formula>
+			<comment>Check if victory is reachable</comment>
+		</query>
+		
+		<query>
+			<formula>E&lt;&gt; gameManager.Defeat</formula>

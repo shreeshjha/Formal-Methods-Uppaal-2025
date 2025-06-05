@@ -1,0 +1,495 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.6//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_6.dtd'>
+<nta>
+	<declaration>
+// Game Constants
+const int NUM_ENEMIES = 4;
+const int TIMEOUT = 100;
+const int LAST_SPAWN = 4;
+
+// Enemy Parameters
+const int CIRCLE_SPEED = 1;
+const int CIRCLE_HEALTH = 10;
+const int CIRCLE_DAMAGE = 2;
+const int SQUARE_SPEED = 3;
+const int SQUARE_HEALTH = 20;
+const int SQUARE_DAMAGE = 4;
+
+// Turret Parameters
+const int BASIC_RANGE = 2;
+const int BASIC_FIRE_SPEED = 2;
+const int BASIC_DAMAGE = 2;
+const int CANNON_RANGE = 1;
+const int CANNON_FIRE_SPEED = 7;
+const int CANNON_DAMAGE = 5;
+const int SNIPER_RANGE = 4;
+const int SNIPER_FIRE_SPEED = 20;
+const int SNIPER_DAMAGE = 8;
+
+// Main Tower
+const int MAIN_TOWER_HEALTH = 10;
+int[0, TIMEOUT] enter_time[NUM_ENEMIES] = {0,0,0,0};
+
+
+// Enemy tracking arrays
+int pos[NUM_ENEMIES] = {0,0,0,0};
+int hp[NUM_ENEMIES] = {10,10,20,20};
+int dmg[NUM_ENEMIES] = {2,2,4,4};
+int spawn_time[NUM_ENEMIES] = {2,2,3,3};
+int time_on_map[NUM_ENEMIES] = {0,0,0,0};
+
+// Game state
+int lives = 10;
+bool game_over = false;
+bool timeout_reached = false;
+int global_clock = 0;
+
+// Coordinate structure
+typedef struct { int x; int y; } Coord;
+
+// Path
+const int PATH_LENGTH = 23;
+const Coord path[PATH_LENGTH] = {
+  {0,0},{1,0},{2,0},{3,0},{4,0},{4,1},{4,2},{4,3},{4,4},{5,4},
+  {6,4},{7,4},{8,4},{8,5},{8,6},{8,7},{9,7},{10,7},{11,7},{12,7},
+  {13,7},{14,7},{15,4}
+};
+
+const int BRANCH_POINTS = 2;
+const Coord branches[BRANCH_POINTS] = {{7,4},{10,7}};
+
+const int ALT_PATH1_LENGTH = 10;
+const Coord alt_path1[ALT_PATH1_LENGTH] = {
+  {7,3},{7,2},{7,1},{8,1},{9,1},{10,1},{11,1},{12,1},{13,1},{14,1}
+};
+
+const int ALT_PATH2_LENGTH = 5;
+const Coord alt_path2[ALT_PATH2_LENGTH] = {
+  {10,6},{10,5},{11,5},{12,5},{13,5}
+};
+
+// Tracking path
+int path_choice[NUM_ENEMIES] = {0,0,0,0};
+int alt_pos[NUM_ENEMIES] = {0,0,0,0};
+
+// Main tower location
+const Coord mainTower = {15, 4};
+
+// Turret configurations
+const int basic_x[1] = {5};
+const int basic_y[1] = {5};
+const int cannon_x[4] = {8,8,14,14};
+const int cannon_y[4] = {2,6,2,6};
+const int sniper_x[2] = {2,11};
+const int sniper_y[2] = {3,5};
+
+// Helpers
+
+
+int distance(int x1, int y1, int x2, int y2) {
+  return abs(x1 - x2) + abs(y1 - y2);
+}
+
+Coord get_enemy_position(int id) {
+  Coord dummy = {-1,-1};
+  if (hp[id] &lt;= 0) return dummy;
+  if (path_choice[id]==0 &amp;&amp; pos[id]&gt;=0 &amp;&amp; pos[id]&lt;PATH_LENGTH) return path[pos[id]];
+  if (path_choice[id]==1 &amp;&amp; alt_pos[id]&gt;=0 &amp;&amp; alt_pos[id]&lt;ALT_PATH1_LENGTH) return alt_path1[alt_pos[id]];
+  if (path_choice[id]==2 &amp;&amp; alt_pos[id]&gt;=0 &amp;&amp; alt_pos[id]&lt;ALT_PATH2_LENGTH) return alt_path2[alt_pos[id]];
+  return dummy;
+}
+
+bool in_range(int id, int tx, int ty, int range) {
+  Coord e = get_enemy_position(id);
+  int ex = e.x, ey = e.y;
+  return distance(ex, ey, tx, ty) &lt;= range;
+}
+
+bool target_available(int tx, int ty, int range) {
+    int i;
+  for ( i = 0; i &lt; NUM_ENEMIES; ++i)
+    if (hp[i] &gt; 0 &amp;&amp; pos[i] &gt;= 0 &amp;&amp; in_range(i, tx, ty, range)) return true;
+  return false;
+}
+void fire(int tx, int ty, int dmg_amt, int range) {
+    int i;
+  int target = -1;
+  for ( i = 3; i &lt; NUM_ENEMIES; ++i)
+    if (hp[i] &gt; 0 &amp;&amp; in_range(i, tx, ty, range) &amp;&amp; (target == -1 || time_on_map[i] &lt; time_on_map[target]))
+      target = i;
+  if (target == -1)
+    for ( i = 0; i &lt; 3; ++i)
+      if (hp[i] &gt; 0 &amp;&amp; in_range(i, tx, ty, range) &amp;&amp; (target == -1 || time_on_map[i] &lt; time_on_map[target]))
+        target = i;
+  if (target != -1) hp[target] -= dmg_amt;
+}
+
+bool all_enemies_gone() {
+    int i;
+  for (i = 0; i &lt; NUM_ENEMIES; ++i) {
+    if (hp[i] &gt; 0) {
+      if (path_choice[i] == 0 &amp;&amp; pos[i] &gt;= 0 &amp;&amp; pos[i] &lt; PATH_LENGTH) return false;
+      if (path_choice[i] == 1 &amp;&amp; alt_pos[i] &gt;= 0 &amp;&amp; alt_pos[i] &lt; ALT_PATH1_LENGTH) return false;
+      if (path_choice[i] == 2 &amp;&amp; alt_pos[i] &gt;= 0 &amp;&amp; alt_pos[i] &lt; ALT_PATH2_LENGTH) return false;
+    }
+  }
+  return true;
+}
+
+bool is_branch_point(int x, int y) {
+    int i;
+  for ( i = 0; i &lt; BRANCH_POINTS; ++i)
+    if (branches[i].x == x &amp;&amp; branches[i].y == y) return true;
+  return false;
+}
+
+void update_enemy_position(int id) {
+  if (path_choice[id] == 0) pos[id]++;
+  else alt_pos[id]++;
+}
+
+bool reached_path_end(int id) {
+  if (path_choice[id] == 0) return pos[id] &gt;= PATH_LENGTH - 1;
+  if (path_choice[id] == 1) return alt_pos[id] &gt;= ALT_PATH1_LENGTH - 1;
+  return alt_pos[id] &gt;= ALT_PATH2_LENGTH - 1;
+}
+
+int get_enemy_speed(int id) {
+  return (id &lt; 3) ? CIRCLE_SPEED : SQUARE_SPEED;
+}
+
+bool is_at_branch(int id) {
+  Coord p = get_enemy_position(id);
+  return is_branch_point(p.x, p.y);
+}
+
+bool can_move(int id) {
+  return hp[id] &gt; 0 &amp;&amp; !is_at_branch(id) &amp;&amp; !reached_path_end(id);
+}
+
+bool can_branch(int id) {
+  return hp[id] &gt; 0 &amp;&amp; is_at_branch(id);
+}
+
+void mark_enemy_done(int id) {
+  if (path_choice[id] == 0) pos[id] = -1;
+  else alt_pos[id] = -1;
+}
+</declaration>
+	<template>
+		<name>EnemyTemplate</name>
+		<parameter>int id</parameter>
+		<declaration>clock clk;</declaration>
+		<location id="id0" x="0" y="-100">
+			<name x="-30" y="-130">Spawned</name>
+			<committed/>
+		</location>
+		<location id="id1" x="200" y="-100">
+			<name x="170" y="-130">Moving</name>
+		</location>
+		<location id="id2" x="400" y="-100">
+			<name x="370" y="-130">AtBranch</name>
+			<urgent/>
+		</location>
+		<location id="id3" x="600" y="-200">
+			<name x="570" y="-230">Goal</name>
+		</location>
+		<location id="id4" x="600" y="0">
+			<name x="570" y="-30">Killed</name>
+		</location>
+		<location id="id5" x="-200" y="-100">
+			<name x="-230" y="-130">NotActive</name>
+		</location>
+		<init ref="id5"/>
+		<transition id="id6">
+			<source ref="id5"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-102" y="-153">global_clock &gt;= spawn_time[id]</label>
+		</transition>
+		<transition id="id7">
+			<source ref="id0"/>
+			<target ref="id1"/>
+			<label kind="guard" x="0" y="-60">hp[id] &gt; 0</label>
+			<label kind="assignment" x="0" y="-40">pos[id] = 0, time_on_map[id] = 0, clk = 0</label>
+		</transition>
+		<transition id="id8">
+			<source ref="id0"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-50" y="-80">hp[id] &lt;= 0</label>
+		</transition>
+		<transition id="id9">
+			<source ref="id1"/>
+			<target ref="id2"/>
+			<label kind="guard" x="230" y="-80">clk &gt;= get_enemy_speed(id) &amp;&amp; can_branch(id)</label>
+			<label kind="assignment" x="230" y="-60">clk = 0, time_on_map[id] = time_on_map[id] + 1</label>
+		</transition>
+		<transition id="id10">
+			<source ref="id1"/>
+			<target ref="id1"/>
+			<label kind="guard" x="213" y="-326">clk &gt;= get_enemy_speed(id) &amp;&amp; can_move(id)</label>
+			<label kind="assignment" x="213" y="-306">update_enemy_position(id), clk = 0, time_on_map[id] = time_on_map[id] + 1</label>
+			<nail x="153" y="-416"/>
+			<nail x="213" y="-416"/>
+		</transition>
+		<transition id="id11">
+			<source ref="id1"/>
+			<target ref="id3"/>
+			<label kind="guard" x="550" y="-160">clk &gt;= get_enemy_speed(id) &amp;&amp; reached_path_end(id)</label>
+			<label kind="assignment" x="550" y="-140">lives = lives - dmg[id], clk = 0, mark_enemy_done(id), enter_time[id] = global_clock</label>
+		</transition>
+		<transition id="id12">
+			<source ref="id1"/>
+			<target ref="id4"/>
+			<label kind="guard" x="550" y="20">hp[id] &lt;= 0</label>
+			<label kind="assignment" x="550" y="40">clk = 0, mark_enemy_done(id)</label>
+		</transition>
+		<transition id="id13">
+			<source ref="id2"/>
+			<target ref="id1"/>
+			<label kind="assignment" x="430" y="-60">clk = 0, path_choice[id] = 0, update_enemy_position(id)</label>
+		</transition>
+		<transition id="id14">
+			<source ref="id2"/>
+			<target ref="id1"/>
+			<label kind="assignment" x="430" y="-40">clk = 0, path_choice[id] = 1, alt_pos[id] = 0</label>
+		</transition>
+		<transition id="id15">
+			<source ref="id2"/>
+			<target ref="id1"/>
+			<label kind="assignment" x="430" y="-20">clk = 0, path_choice[id] = 2, alt_pos[id] = 0</label>
+		</transition>
+	</template>
+	<template>
+		<name>SniperTurret</name>
+		<parameter>int x,int y</parameter>
+		<declaration>clock t;
+const int RANGE = SNIPER_RANGE;
+const int FIRE_RATE = SNIPER_FIRE_SPEED;
+const int DAMAGE = SNIPER_DAMAGE;</declaration>
+		<location id="id16" x="0" y="0">
+			<name x="-20" y="-34">Idle</name>
+		</location>
+		<location id="id17" x="200" y="0">
+			<name x="180" y="-34">Firing</name>
+			<committed/>
+		</location>
+		<init ref="id16"/>
+		<transition id="id18">
+			<source ref="id16"/>
+			<target ref="id17"/>
+			<label kind="guard" x="0" y="50">t &gt;= FIRE_RATE &amp;&amp; target_available(x, y, RANGE)</label>
+			<label kind="assignment" x="0" y="70">t = 0</label>
+		</transition>
+		<transition id="id19">
+			<source ref="id17"/>
+			<target ref="id16"/>
+			<label kind="assignment" x="100" y="20">fire(x, y, DAMAGE, RANGE)</label>
+		</transition>
+	</template>
+	<template>
+		<name>CannonTurret</name>
+		<parameter>int x,int y</parameter>
+		<declaration>clock t;
+const int RANGE = CANNON_RANGE;
+const int FIRE_RATE = CANNON_FIRE_SPEED;
+const int DAMAGE = CANNON_DAMAGE;</declaration>
+		<location id="id20" x="0" y="0">
+			<name x="-20" y="-34">Idle</name>
+		</location>
+		<location id="id21" x="200" y="0">
+			<name x="180" y="-34">Firing</name>
+			<committed/>
+		</location>
+		<init ref="id20"/>
+		<transition id="id22">
+			<source ref="id20"/>
+			<target ref="id21"/>
+			<label kind="guard" x="0" y="50">t &gt;= FIRE_RATE &amp;&amp; target_available(x, y, RANGE)</label>
+			<label kind="assignment" x="0" y="70">t = 0</label>
+		</transition>
+		<transition id="id23">
+			<source ref="id21"/>
+			<target ref="id20"/>
+			<label kind="assignment" x="100" y="20">fire(x, y, DAMAGE, RANGE)</label>
+		</transition>
+	</template>
+	<template>
+		<name>BasicTurret</name>
+		<parameter>int x,int y</parameter>
+		<declaration>clock t;
+const int RANGE = BASIC_RANGE;
+const int FIRE_RATE = BASIC_FIRE_SPEED;
+const int DAMAGE = BASIC_DAMAGE;</declaration>
+		<location id="id24" x="0" y="0">
+			<name x="-20" y="-34">Idle</name>
+		</location>
+		<location id="id25" x="200" y="0">
+			<name x="180" y="-34">Firing</name>
+			<committed/>
+		</location>
+		<init ref="id24"/>
+		<transition id="id26">
+			<source ref="id24"/>
+			<target ref="id25"/>
+			<label kind="guard" x="0" y="50">t &gt;= FIRE_RATE &amp;&amp; target_available(x, y, RANGE)</label>
+			<label kind="assignment" x="0" y="70">t = 0</label>
+		</transition>
+		<transition id="id27">
+			<source ref="id25"/>
+			<target ref="id24"/>
+			<label kind="assignment" x="100" y="20">fire(x, y, DAMAGE, RANGE)</label>
+		</transition>
+	</template>
+	<template>
+		<name>ClockTick</name>
+		<declaration>clock c;</declaration>
+		<location id="id28" x="0" y="0">
+			<name x="-20" y="-34">Tick</name>
+			<label kind="invariant" x="0" y="20">c &lt;= 1</label>
+		</location>
+		<init ref="id28"/>
+		<transition id="id29">
+			<source ref="id28"/>
+			<target ref="id28"/>
+			<label kind="guard" x="-100" y="0">c &gt;= 1 &amp;&amp; !game_over &amp;&amp; global_clock &lt; TIMEOUT</label>
+			<label kind="assignment" x="-100" y="30">c = 0, global_clock = global_clock + 1</label>
+			<nail x="-30" y="-30"/>
+			<nail x="30" y="-30"/>
+		</transition>
+	</template>
+	<template>
+		<name>GameMonitor</name>
+		<location id="id30" x="0" y="0">
+			<name x="-20" y="-34">Wait</name>
+		</location>
+		<location id="id31" x="-150" y="0">
+			<name x="-180" y="-34">WinState</name>
+			<committed/>
+		</location>
+		<location id="id32" x="150" y="0">
+			<name x="120" y="-34">LoseState</name>
+			<committed/>
+		</location>
+		<location id="id33" x="0" y="150">
+			<name x="-30" y="120">Timeout</name>
+			<committed/>
+		</location>
+		<location id="id34" x="0" y="300">
+			<name x="-20" y="270">Done</name>
+		</location>
+		<init ref="id30"/>
+		<transition id="id35">
+			<source ref="id34"/>
+			<target ref="id34"/>
+			<nail x="-51" y="357"/>
+			<nail x="59" y="357"/>
+		</transition>
+		<transition id="id36">
+			<source ref="id30"/>
+			<target ref="id31"/>
+			<label kind="guard" x="-100" y="-30">global_clock &gt;= LAST_SPAWN &amp;&amp; all_enemies_gone() &amp;&amp; lives &gt; 0</label>
+			<label kind="assignment" x="-100" y="0">game_over = true</label>
+		</transition>
+		<transition id="id37">
+			<source ref="id30"/>
+			<target ref="id32"/>
+			<label kind="guard" x="100" y="-30">lives &lt;= 0</label>
+			<label kind="assignment" x="100" y="0">game_over = true</label>
+		</transition>
+		<transition id="id38">
+			<source ref="id30"/>
+			<target ref="id33"/>
+			<label kind="guard" x="0" y="100">global_clock &gt;= TIMEOUT</label>
+			<label kind="assignment" x="0" y="120">game_over = true, timeout_reached = true</label>
+		</transition>
+		<transition id="id39">
+			<source ref="id31"/>
+			<target ref="id34"/>
+		</transition>
+		<transition id="id40">
+			<source ref="id32"/>
+			<target ref="id34"/>
+		</transition>
+		<transition id="id41">
+			<source ref="id33"/>
+			<target ref="id34"/>
+		</transition>
+	</template>
+	<system>
+//Basic1 = BasicTurret(basic_x[0], basic_y[0]);
+//Cannon1 = CannonTurret(cannon_x[0], cannon_y[0]);
+//Cannon2 = CannonTurret(cannon_x[1], cannon_y[1]);
+//Cannon3 = CannonTurret(cannon_x[2], cannon_y[2]);
+//Cannon4 = CannonTurret(cannon_x[3], cannon_y[3]);
+//Sniper1 = SniperTurret(sniper_x[0], sniper_y[0]);
+//Sniper2 = SniperTurret(sniper_x[1], sniper_y[1]);
+clock1 = ClockTick();
+GM = GameMonitor();
+E0 = EnemyTemplate(0);
+E1 = EnemyTemplate(1);
+E2 = EnemyTemplate(2);
+E3 = EnemyTemplate(3);
+//E4 = EnemyTemplate(4);
+//E5 = EnemyTemplate(5);
+system clock1, GM, E0, E1, E2, E3;
+</system>
+	<queries>
+		<query>
+			<formula>A[] not deadlock</formula>
+			<comment>I) Game never reaches deadlock</comment>
+			<option key="--exploration" value="0"/>
+			<option key="--state-representation" value="0"/>
+			<option key="--search-order" value="0"/>
+			<option key="--statespace-consumption" value="3"/>
+			<option key="--diagnostic" value="-1"/>
+		</query>
+		<query>
+			<formula>E&lt;&gt; E0.Goal &amp;&amp; E1.Goal &amp;&amp; E2.Goal &amp;&amp; E3.Goal</formula>
+			<comment>II) All enemies can reach the main tower</comment>
+			<option key="--exploration" value="0"/>
+			<option key="--state-representation" value="1"/>
+			<option key="--search-order" value="1"/>
+			<option key="--statespace-consumption" value="3"/>
+			<option key="--diagnostic" value="-1"/>
+		</query>
+		<query>
+			<formula>A[] E0.Goal imply enter_time[0] &lt;= 36
+
+
+</formula>
+			<comment>III) Circles reach in time</comment>
+			<option key="--search-order" value="1"/>
+			<option key="--statespace-consumption" value="1"/>
+			<option key="--diagnostic" value="-1"/>
+			<result outcome="failure" type="quality" timestamp="2025-06-02 12:33:15 +0200">
+				<option key="--search-order" value="1"/>
+				<option key="--statespace-consumption" value="1"/>
+				<option key="--diagnostic" value="-1"/>
+			</result>
+		</query>
+		<query>
+			<formula>A[] (E2.Goal || E3.Goal) imply global_clock &lt;= PATH_LENGTH * SQUARE_SPEED</formula>
+			<comment>IV) Squares reach in time</comment>
+			<option key="--search-order" value="1"/>
+			<option key="--statespace-consumption" value="1"/>
+			<option key="--diagnostic" value="-1"/>
+			<result outcome="failure" type="quality" timestamp="2025-06-02 12:08:57 +0200">
+				<option key="--search-order" value="1"/>
+				<option key="--statespace-consumption" value="1"/>
+				<option key="--diagnostic" value="-1"/>
+			</result>
+		</query>
+		<query>
+			<formula>A[] forall(i : int[0,NUM_ENEMIES-1]) (pos[i]&gt;=0 &amp;&amp; pos[i]&lt;PATH_LENGTH) || (path_choice[i]==1 &amp;&amp; alt_pos[i]&gt;=0 &amp;&amp; alt_pos[i]&lt;ALT_PATH1_LENGTH) || (path_choice[i]==2 &amp;&amp; alt_pos[i]&gt;=0 &amp;&amp; alt_pos[i]&lt;ALT_PATH2_LENGTH) || pos[i]==-1</formula>
+			<comment>V) Enemies never leave the red path</comment>
+		</query>
+		<query>
+			<formula>E&lt;&gt; GM.WinState</formula>
+			<comment>VI) Configuration VI wins</comment>
+		</query>
+		<query>
+			<formula>A[] not deadlock</formula>
+			<comment>VII) No deadlock under Configuration VI</comment>
+		</query>
+	</queries>
+</nta>
